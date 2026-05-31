@@ -1,0 +1,105 @@
+node_modules/
+dist/
+
+# AI engines: MMAudio / Woosh are full upstream OSS clones (each has its own
+# embedded .git, GB-scale weights, venvs). They're reproducible via the PoC
+# clone steps in DEVELOPMENT_PLAN §2, so we DON'T vendor the upstream trees —
+# we track ONLY our own thin service wrappers + the launch scripts at engines/.
+engines/mmaudio/*
+engines/woosh/*
+!engines/mmaudio/audiosfx_api.py
+!engines/woosh/audiosfx_api.py
+engines/ffmpeg-shared/
+engines/*/_svc.*
+
+data/projects/
+data/outputs/
+data/tmp/
+*.mp4
+*.mp3
+.env
+.env.local
+.claude/settings.local.json
+
+# Secrets — encrypted API keys live in settings.json once configured
+data/settings.json
+data/secrets*
+
+# Membership / billing SQLite (G1+)
+data/billing.db
+data/billing.db-journal
+data/billing.db-wal
+data/billing.db-shm
+*.pem
+*.key
+*.p12
+*.pfx
+# Plain-text secret scratchpads (e.g. klin.txt, openai_keys.txt) — never commit
+/klin.txt
+/*-keys.txt
+/*-keys.json
+/*.secret
+release/
+*.exe.stackdump
+wavdata/
+
+# Rust / napi-rs
+native/**/target/
+native/**/*.node
+native/media-engine/index.js
+native/media-engine/index.d.ts
+
+# Local test scripts / screenshots / scratch notes
+/test-*.mjs
+/test-*.png
+/architecture.html
+/架構.md
+/plus.svg
+/icon/
+/data/whisper/
+# Scratch / debug artefacts dropped at data/ root (whisper test wavs / srt,
+# transcribe-log.txt, .test_spawn.mjs, etc). Anything dot-prefixed at this
+# level is throwaway by convention.
+/data/.*
+
+# TTS server
+tts-server/output/
+tts-server/tmp/
+tts-server/.env
+tts-server/__pycache__/
+
+# Local-only: machine state, scratch notes, side-project artefacts
+/.claude/
+/PROJECT_STATE.json
+/ai-video-engine-docs/
+/codex分析.md
+/codex建議.md
+/gpt建議.md
+/對外部署計畫.md
+/create-dineflow-guide.mjs
+
+# 13soulMU fork leftovers — not part of AudioSFX (kept on disk, not committed)
+/brief/
+/docs/
+/tts-server/
+/ARCHITECTURE.md
+/README.md
+/CLAUDE.md
+/handoff.md
+/13soul-video-engine-SPEC-v2.md
+/13soulMU_AI_video_provider_strategy.md
+/claude_voice_caption_dev_spec.md
+/modelark-api-reference-zh-tw.html
+/modelark-release-notes-zh-tw.html
+/動作資料庫.md
+
+# Playwright run artefacts
+/tests/e2e/__results__/
+/tests/e2e/__snapshots__/
+/tests/e2e/__data__/
+
+# Microsoft fonts (proprietary, bundled with Windows). Available locally for
+# dev rendering but cannot ship in the Electron build. Only Noto fonts (OFL)
+# in assets/fonts are committed.
+assets/fonts/msjh*.ttc
+assets/fonts/mingliu*.ttc

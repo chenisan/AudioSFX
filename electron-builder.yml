@@ -1,0 +1,47 @@
+appId: com.13soul.mu
+productName: 13SoulMU
+copyright: Copyright 2026 13soul
+
+directories:
+  output: release
+
+files:
+  - dist/**/*
+  - electron/**/*
+  - templates/**/*
+  - icon/icon.png
+  - icon/icon.ico
+  - node_modules/**/*
+  - package.json
+  - native/media-engine/index.js
+  - native/media-engine/index.d.ts
+  - native/media-engine/package.json
+  - native/media-engine/*.node
+
+asarUnpack:
+  - native/media-engine/*.node
+
+extraResources:
+  - from: node_modules/ffmpeg-static/ffmpeg.exe
+    to: ffmpeg.exe
+
+win:
+  icon: icon/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+  signAndEditExecutable: false
+  forceCodeSigning: false
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 13SoulMU
+  installerIcon: icon/icon.ico
+  uninstallerIcon: icon/icon.ico
+  installerHeaderIcon: icon/icon.ico
+
+asar: true

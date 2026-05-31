@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Free-tier export watermark.
+
+  Design intent — must remain legible when overlaid in the bottom-right
+  corner of a 720p video at ~12% of frame width (≈86px wide). White
+  dominates so it reads as a watermark, not a logo; the red "S" echoes
+  the app favicon (rgba(233,69,96) = #E94560 = 13soul brand red) so the
+  mark is recognisable but unobtrusive.
+
+  Font is Arial Black because it is present on every Windows install
+  and ships in most ffmpeg / librsvg font fallback chains. Avoid Inter
+  or any custom face here — when ffmpeg rasterises the SVG via
+  librsvg the font resolution happens against the host's font cache,
+  not the editor's web font set, so missing fonts silently fall back
+  and break the visual.
+
+  Opacity is baked in (0.72 on the group) rather than applied at the
+  ffmpeg overlay layer so the same PNG looks identical regardless of
+  how it's composited.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 220 64"
+     width="220" height="64"
+     role="img"
+     aria-label="13soul watermark">
+  <title>13SOUL watermark</title>
+  <g opacity="0.72">
+    <text x="110" y="48"
+          font-family="Arial Black, Helvetica, sans-serif"
+          font-weight="900"
+          font-size="46"
+          letter-spacing="-1"
+          text-anchor="middle"
+          fill="#ffffff">13<tspan fill="#E94560">S</tspan>OUL</text>
+  </g>
+</svg>
