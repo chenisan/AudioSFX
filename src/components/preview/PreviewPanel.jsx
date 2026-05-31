@@ -172,7 +172,7 @@ function TimelinePreview({ project, playheadTime, isPlaying, setPlayheadTime, se
           trimStart,
           trimEnd: trimStart + sourceRange,
           speed: clipSpeed,
-          volume: c.volume == null ? 1 : c.volume,
+          volume: (c.volume == null ? 1 : c.volume) * (t.volume == null ? 1 : t.volume),
           muted: trackMuted || !!c.muted,
           fadeIn: Math.max(0, Number(c.fadeIn?.duration) || 0),
           fadeOut: Math.max(0, Number(c.fadeOut?.duration) || 0),
@@ -1066,16 +1066,37 @@ export default function PreviewPanel() {
         )}
       </div>
 
-      {/* Playback controls */}
-      <div className="border-t border-[#2a2a2a] px-3 py-1.5 flex items-center shrink-0 relative">
-        <span className="font-mono text-xs tabular-nums">
-          <span className="text-[#6d5efc]">{formatTimecode(playheadTime)}</span>
-          {project && <span className="text-[#666]"> / {formatTimecode(contentEnd)}</span>}
-        </span>
+      {/* Playback controls — two rows: time + zoom on top, the rest below */}
+      <div className="border-t border-[#2a2a2a] px-3 py-1.5 flex flex-col gap-1.5 shrink-0 relative">
+        {/* Row 1: time + preview zoom */}
+        <div className="flex items-center">
+          <span className="font-mono text-xs tabular-nums">
+            <span className="text-[#6d5efc]">{formatTimecode(playheadTime)}</span>
+            {project && <span className="text-[#666]"> / {formatTimecode(contentEnd)}</span>}
+          </span>
+          <div className="flex-1" />
+          {/* Preview zoom slider (Ctrl/Cmd+wheel also zooms; % label resets to 100%) */}
+          <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-[#1a1a1a] border border-[#2a2a2a]">
+            <button
+              onClick={() => setPreviewZoom(1)}
+              disabled={previewZoom === 1}
+              className={`text-[10px] font-mono w-9 text-center ${previewZoom === 1 ? 'text-[#666]' : 'text-[#6d5efc] hover:text-white'}`}
+              title="回 100%"
+            >{Math.round(previewZoom * 100)}%</button>
+            <input
+              type="range"
+              value={zoomToSliderPct(previewZoom)}
+              min={0} max={100} step={1}
+              onChange={e => setPreviewZoom(sliderPctToZoom(+e.target.value))}
+              onDoubleClick={() => setPreviewZoom(1)}
+              className="w-20 h-1 accent-[#6d5efc] cursor-pointer"
+              title="預覽縮放（雙擊回 100%）"
+            />
+          </div>
+        </div>
 
-        {/* Play / pause is on the timeline toolbar — Space key still toggles. */}
-
-        <div className="flex-1" />
+        {/* Row 2: clip-fit · volume · loop · speed · ratio (wraps when narrow) */}
+        <div className="flex flex-wrap items-center justify-end gap-y-1.5">
 
 
         {/* Per-clip controls (fit/fill toggle + reset position).
@@ -1132,25 +1153,6 @@ export default function PreviewPanel() {
             </div>
           )
         })()}
-
-        {/* Preview zoom slider (Ctrl/Cmd+wheel also zooms; % label resets to 100%) */}
-        <div className="flex items-center gap-1.5 mr-2 px-1.5 py-0.5 rounded bg-[#1a1a1a] border border-[#2a2a2a]">
-          <button
-            onClick={() => setPreviewZoom(1)}
-            disabled={previewZoom === 1}
-            className={`text-[10px] font-mono w-9 text-center ${previewZoom === 1 ? 'text-[#666]' : 'text-[#6d5efc] hover:text-white'}`}
-            title="回 100%"
-          >{Math.round(previewZoom * 100)}%</button>
-          <input
-            type="range"
-            value={zoomToSliderPct(previewZoom)}
-            min={0} max={100} step={1}
-            onChange={e => setPreviewZoom(sliderPctToZoom(+e.target.value))}
-            onDoubleClick={() => setPreviewZoom(1)}
-            className="w-20 h-1 accent-[#6d5efc] cursor-pointer"
-            title="預覽縮放（雙擊回 100%）"
-          />
-        </div>
 
         {/* Master volume */}
         <div className="flex items-center gap-1.5 mr-2" title="主音量">
@@ -1240,6 +1242,7 @@ export default function PreviewPanel() {
               </div>
             </>
           )}
+        </div>
         </div>
       </div>
     </div>

@@ -34,6 +34,9 @@ export function createEditorUISlice(set, get) {
     previewAsset: null,
     autoSnap: false,
     loopExportRange: false,
+    // Persistent indicator for long audio generations (MMAudio/Woosh V2A) that
+    // have no sub-step progress. null = idle; otherwise { label, startedAt }.
+    audioGen: null,
 
     exportSettings: {
       format: 'mp4',
@@ -110,6 +113,16 @@ export function createEditorUISlice(set, get) {
       setTimeout(() => {
         if (get().toast?.id === id) set({ toast: null })
       }, 2500)
+    },
+
+    // ── Audio generation status (persistent; no auto-clear) ──────────────────
+
+    /** Mark a long audio generation as in-flight (shows the floating indicator). */
+    beginAudioGen(label) {
+      set({ audioGen: { label, startedAt: Date.now() } })
+    },
+    endAudioGen() {
+      set({ audioGen: null })
     },
 
     // ── Clipboard (clipboard contents are UI-only — actual paste uses REST in projectDoc) ─

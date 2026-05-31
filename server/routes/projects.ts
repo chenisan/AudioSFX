@@ -6,6 +6,7 @@ import {
   getProject,
   updateProject,
   deleteProject,
+  saveProjectToDisk,
   listProjects,
   splitClip,
   duplicateClip,
@@ -102,6 +103,17 @@ router.get('/:id/events', (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const project = await getProject(req.params.id)
+    res.json(project)
+  } catch (err: any) {
+    res.status(404).json({ error: err.message })
+  }
+})
+
+// POST /api/projects/:id/save — manual save: persist the posted project (the
+// client's authoritative full state) to disk and clear staged edits.
+router.post('/:id/save', async (req: Request, res: Response) => {
+  try {
+    const project = await saveProjectToDisk(req.params.id, req.body ?? {})
     res.json(project)
   } catch (err: any) {
     res.status(404).json({ error: err.message })

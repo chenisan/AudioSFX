@@ -9,6 +9,8 @@ import assetsRouter from './routes/assets'
 import renderRouter from './routes/render'
 import previewRouter from './routes/preview'
 import settingsRouter from './routes/settings'
+import audioGenRouter from './routes/audioGen'
+import servicesRouter from './routes/services'
 import { detectHwAccel } from './utils/hwAccel'
 import { requireValidProjectIdParam } from './utils/projectIdGuard'
 import { getDataDir } from './utils/dataDir'
@@ -56,6 +58,8 @@ app.use('/api/projects', projectsRouter)
 app.use('/api/render', renderRouter)
 app.use('/api/preview', previewRouter)
 app.use('/api/settings', settingsRouter)
+app.use('/api/audio', audioGenRouter)
+app.use('/api/services', servicesRouter)
 
 // Production: serve frontend static files
 // When running from source: __dirname = server/, dist is at ../dist

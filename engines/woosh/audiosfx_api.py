@@ -39,7 +39,9 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
 from woosh.inference.flowmap_sampler import sample_euler
+from woosh.inference.flowmatching_sampler import flowmatching_integrate
 from woosh.model.flowmap_from_pretrained import FlowMapFromPretrained
+from woosh.model.ldm import LatentDiffusionModel
 from woosh.components.base import LoadConfig
 from woosh.utils.video import SynchformerProcessor
 from woosh.utils.videoio import extract_video_frames
@@ -50,23 +52,37 @@ log = logging.getLogger("audiosfx.woosh")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 SR = 48000
 DFLOW_PATH = osp.join(ENGINE_DIR, "checkpoints", "Woosh-DFlow")
+FLOW_PATH = osp.join(ENGINE_DIR, "checkpoints", "Woosh-Flow")
 DVFLOW_PATH = osp.join(ENGINE_DIR, "checkpoints", "Woosh-DVFlow-8s")
 
 _gpu_lock = Lock()
-_models = {"dflow": None, "dvflow": None, "synch": None}
-_on_gpu = {"dflow": False, "dvflow": False, "synch": False}
+_models = {"dflow": None, "flow": None, "dvflow": None, "synch": None}
+_on_gpu = {"dflow": False, "flow": False, "dvflow": False, "synch": False}
 
 
 def _ensure_dflow():
-    """DFlow (T2A, ~3.7GB) — the always-warm SFX model in VRAM strategy A."""
+    """DFlow (T2A, ~3.7GB) — the fast 4-step distilled SFX model."""
     if _models["dflow"] is None:
-        log.info("Loading Woosh-DFlow (T2A) on %s ...", DEVICE)
+        log.info("Loading Woosh-DFlow (T2A, fast) on %s ...", DEVICE)
         _models["dflow"] = FlowMapFromPretrained(LoadConfig(path=DFLOW_PATH)).eval().to(DEVICE)
         _on_gpu["dflow"] = True
     elif not _on_gpu["dflow"]:
         _models["dflow"].to(DEVICE)
         _on_gpu["dflow"] = True
     return _models["dflow"]
+
+
+def _ensure_flow():
+    """Flow (T2A, non-distilled) — high-quality SFX via adaptive flow-matching.
+    Cleaner / less grainy than DFlow, a few seconds slower. Default SFX path."""
+    if _models["flow"] is None:
+        log.info("Loading Woosh-Flow (T2A, high quality) on %s ...", DEVICE)
+        _models["flow"] = LatentDiffusionModel(LoadConfig(path=FLOW_PATH)).eval().to(DEVICE)
+        _on_gpu["flow"] = True
+    elif not _on_gpu["flow"]:
+        _models["flow"].to(DEVICE)
+        _on_gpu["flow"] = True
+    return _models["flow"]
 
 
 def _ensure_dvflow():
@@ -122,7 +138,8 @@ def _to_flac_bytes(wav: torch.Tensor) -> bytes:
 class SfxRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     prompt: str
-    num_steps: int = 4
+    hq: bool = True                # True → Woosh-Flow (clean, ~few s); False → DFlow (fast, grainy)
+    num_steps: int = 4             # DFlow only (4-step distilled)
     cfg: float = 4.5
     seed: int | None = None
 
@@ -130,6 +147,7 @@ class SfxRequest(BaseModel):
 class V2aRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     video_path: str
+    start: float = 0.0             # source offset (sec); model window is always [start, start+8]
     description: str = ""           # empty text is fine; or a description of the video
     num_steps: int = 4
     cfg: float = 3.0
@@ -167,10 +185,11 @@ def evict(req: EvictRequest = EvictRequest()):
 
 @app.post("/generate/sfx")
 def generate_sfx(req: SfxRequest):
-    """Text→SFX via Woosh-DFlow (4-step distilled)."""
+    """Text→SFX. Default = Woosh-Flow (high quality, adaptive flow-matching);
+    set hq=false for the fast 4-step DFlow."""
     with _gpu_lock:
         try:
-            ldm = _ensure_dflow()
+            ldm = _ensure_flow() if req.hq else _ensure_dflow()   # load BEFORE timing
             gen = torch.Generator()
             if req.seed is not None:
                 gen.manual_seed(req.seed)
@@ -178,11 +197,17 @@ def generate_sfx(req: SfxRequest):
             t0 = time.perf_counter()
             with torch.inference_mode():
                 cond = ldm.get_cond({"audio": None, "description": [req.prompt]}, no_dropout=True, device=DEVICE)
-                x = sample_euler(model=ldm, noise=noise, cond=cond, num_steps=req.num_steps,
-                                 renoise=[0, 0.5, 0.5, 0.3], cfg=req.cfg)
+                if req.hq:
+                    x, _steps = flowmatching_integrate(
+                        ldm, noise=noise, cond=cond, cfg=req.cfg,
+                        atol=0.001, rtol=0.001, return_steps=True, device=DEVICE, dtype=torch.float64,
+                    )
+                else:
+                    x = sample_euler(model=ldm, noise=noise, cond=cond, num_steps=req.num_steps,
+                                     renoise=[0, 0.5, 0.5, 0.3], cfg=req.cfg)
                 wav = ldm.autoencoder.inverse(x).cpu()
             gen_time = time.perf_counter() - t0
-            log.info("SFX generated in %.2fs", gen_time)
+            log.info("SFX generated in %.2fs (hq=%s)", gen_time, req.hq)
         except Exception as e:  # noqa: BLE001
             log.exception("Woosh SFX generation failed")
             raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
@@ -208,7 +233,7 @@ def generate_v2a(req: V2aRequest):
             noise = torch.normal(0, 1, size=(1, 128, 801), generator=gen).to(DEVICE)
             t0 = time.perf_counter()
             with torch.inference_mode():
-                frames, rate, _pts = extract_video_frames(video_path, start_time=0, end_time=8)
+                frames, rate, _pts = extract_video_frames(video_path, start_time=req.start, end_time=req.start + 8)
                 frames = frames.to(DEVICE)
                 features = synch(frames, rate)
                 cond = ldm.get_cond(

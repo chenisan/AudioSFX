@@ -261,11 +261,13 @@ export function useProject() {
   }
 
   async function saveProject() {
-    // Read project at call time so this hook doesn't need to subscribe.
+    // Manual save: edits are staged in server memory during the session; this
+    // flushes the client's authoritative full project to disk. setProject()
+    // resets isDirty:false (clean).
     const project = useProjectStore.getState().project
     if (!project) return
-    const res = await fetch(`/api/projects/${project.id}`, {
-      method: 'PUT',
+    const res = await fetch(`/api/projects/${project.id}/save`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(project),
     })

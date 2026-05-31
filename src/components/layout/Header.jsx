@@ -3,6 +3,7 @@ import { useProjectStore, ASPECT_RATIOS, EXPORT_RESOLUTIONS } from '../../stores
 import { useProject } from '../../hooks/useProject'
 import { useRender } from '../../hooks/useRender'
 import RenderProgress from '../render/RenderProgress'
+import EngineControls from '../services/EngineControls'
 
 export default function Header({ onOpenProjectModal, onOpenSettings }) {
   // Narrowed — Header only needs id (truthy gating) + name (display); the
@@ -81,6 +82,9 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
         >
           {rendering ? '渲染中...' : saving ? '儲存中...' : '匯出'}
         </button>
+
+        {/* Inference service control / monitor */}
+        <EngineControls />
 
         {/* Settings */}
         <button

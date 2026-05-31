@@ -3,6 +3,7 @@ import { useRef, useState, useEffect, memo } from 'react'
 import { useProjectStore, ASPECT_RATIOS } from '../../stores/projectStore'
 import { useClipDrag } from '../../hooks/useDragDrop'
 import { timeToPx } from '../../utils/timeFormat'
+import SegmentSfxModal from '../audio/SegmentSfxModal'
 
 const TRACK_TYPE_COLORS = {
   video:  '#3b82f6',
@@ -239,12 +240,51 @@ export default memo(function Clip({ trackId, trackType, index, clip, containerRe
   const ratio = ASPECT_RATIOS.find(r => r.id === ratioId) ?? ASPECT_RATIOS[0]
   const { onMouseDown } = useClipDrag({ trackId, index, containerRef })
   const [ctxMenu, setCtxMenu] = useState(null) // { x, y }
+  const [sfxSegOpen, setSfxSegOpen] = useState(false)
   const height = clipHeight ?? CLIP_HEIGHT
 
   const left = timeToPx(clip.start, zoom)
   const width = Math.max(8, timeToPx(clip.end - clip.start, zoom))
   const isColorFill = trackType === 'video' && !!clip.colorFill
   const isVideoTrack = trackType === 'video'
+  // A real video clip (has a source file) can drive audio generation.
+  const isVideoClip = isVideoTrack && !!clip.source && !isColorFill
+
+  // Generate audio FROM this clip's video (MMAudio synced底聲 or Woosh V2A SFX),
+  // land it as an asset, and drop an audio clip aligned to this clip's start.
+  const generateAudioForClip = async (kind) => {
+    if (!projectId || !clip.source) return
+    const store = useProjectStore.getState()
+    if (store.audioGen) { store.showToast?.('已有音效生成進行中，請稍候', 'warn'); return }
+    const label = kind === 'mmaudio' ? '同步環境音' : '音效'
+    store.beginAudioGen?.(kind === 'mmaudio' ? '正在用 MMAudio 生成同步環境音…' : '正在用 Woosh 生成音效…')
+    try {
+      const body = { projectId, source: clip.source }
+      // MMAudio matches the clip's length (capped to keep VRAM in check).
+      // Woosh-DVFlow is a fixed-8s model — duration is ignored there.
+      if (kind === 'mmaudio') {
+        body.duration = Math.max(1, Math.min(30, Number((clip.end - clip.start).toFixed(2))))
+      }
+      const res = await fetch(`/api/audio/${kind}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      const dur = data.durationSec || (clip.end - clip.start)
+      const newClip = { source: data.filename, start: clip.start, end: clip.start + dur, sourceDuration: dur }
+      const audioTrack = store.project?.timeline?.tracks?.find(t => t.type === 'audio')
+      if (audioTrack) store.addClip(audioTrack.id, newClip)
+      else store.addTrackWithClip('audio', newClip)
+      store.bumpAssetVersion?.()
+      store.showToast?.(`已生成${label}並加到音軌（${data.genSeconds ?? '?'}s）`, 'success')
+    } catch (e) {
+      store.showToast?.(`生成失敗：${e.message}`, 'warn')
+    } finally {
+      store.endAudioGen?.()
+    }
+  }
 
   const color = isColorFill
     ? clip.colorFill
@@ -437,7 +477,10 @@ export default memo(function Clip({ trackId, trackType, index, clip, containerRe
         <ClipContextMenu
           x={ctxMenu.x}
           y={ctxMenu.y}
+          isVideoClip={isVideoClip}
           onClose={() => setCtxMenu(null)}
+          onGenMMAudio={() => { setCtxMenu(null); generateAudioForClip('mmaudio') }}
+          onGenV2A={() => { setCtxMenu(null); setSfxSegOpen(true) }}
           onDelete={() => {
             setCtxMenu(null)
             removeClip(trackId, index)
@@ -446,11 +489,13 @@ export default memo(function Clip({ trackId, trackType, index, clip, containerRe
           onSplit={() => { setCtxMenu(null); splitClipAtPlayhead() }}
         />
       )}
+
+      {sfxSegOpen && <SegmentSfxModal clip={clip} onClose={() => setSfxSegOpen(false)} />}
     </div>
   )
 })
 
-function ClipContextMenu({ x, y, onClose, onDelete, onDuplicate, onSplit }) {
+function ClipContextMenu({ x, y, onClose, onDelete, onDuplicate, onSplit, isVideoClip, onGenMMAudio, onGenV2A }) {
   // Adjust position so menu stays within viewport
   const menuRef = useRef(null)
   const [pos, setPos] = useState({ x, y })
@@ -466,6 +511,11 @@ function ClipContextMenu({ x, y, onClose, onDelete, onDuplicate, onSplit }) {
   }, [x, y])
 
   const items = [
+    ...(isVideoClip ? [
+      { label: '同步環境音 · 跟畫面長度 (MMAudio)', action: onGenMMAudio, accent: true },
+      { label: '音效 SFX · 分段配音 (Woosh)', action: onGenV2A, accent: true },
+      { divider: true },
+    ] : []),
     { label: '分割片段', shortcut: 'S', action: onSplit },
     { label: '複製片段', shortcut: 'D', action: onDuplicate },
     { divider: true },

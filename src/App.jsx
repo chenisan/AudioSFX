@@ -5,8 +5,9 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import Header from './components/layout/Header'
 import Resizer from './components/layout/Resizer'
 import PreviewPanel from './components/preview/PreviewPanel'
-import PropertyPanel from './components/properties/PropertyPanel'
 import AssetPanel from './components/assets/AssetPanel'
+import SfxPanel from './components/audio/SfxPanel'
+import AudioGenIndicator from './components/audio/AudioGenIndicator'
 import Timeline from './components/timeline/Timeline'
 import Toast from './components/common/Toast'
 import SettingsModal from './components/layout/SettingsModal'
@@ -14,7 +15,6 @@ import SettingsModal from './components/layout/SettingsModal'
 // ── Project Modal ──────────────────────────────────────────────────────────────
 function ProjectModal({ onClose }) {
   const { fetchProjects, createProject, loadProject, deleteProject } = useProject()
-  // Narrowed — only need id for the active-row highlight check.
   const currentProjectId = useProjectStore(s => s.project?.id)
   const [projects, setProjects] = useState([])
   const [newName, setNewName] = useState('')
@@ -57,7 +57,6 @@ function ProjectModal({ onClose }) {
           <button onClick={onClose} className="text-[#666] hover:text-white text-xl">×</button>
         </div>
 
-        {/* New project */}
         <div className="p-4 border-b border-[#2a2a2a] space-y-2">
           <div className="text-xs text-[#666] mb-2">新建專案</div>
           <div className="flex gap-2">
@@ -86,7 +85,6 @@ function ProjectModal({ onClose }) {
           </div>
         </div>
 
-        {/* Existing projects */}
         <div className="flex-1 overflow-y-auto p-2">
           {projects.length === 0 ? (
             <div className="text-center text-[#444] text-sm py-8">沒有專案</div>
@@ -114,31 +112,34 @@ function ProjectModal({ onClose }) {
   )
 }
 
-// ── Left panel — asset library only (stickers/templates/subtitles/tts removed) ──
-function LeftPanel({ width }) {
-  return (
-    <div className="flex flex-col h-full bg-[#1a1a1a]" style={{ width }}>
-      <div className="flex border-b border-[#2a2a2a] shrink-0 px-3 py-2 text-xs text-white">素材</div>
-      <div className="flex-1 overflow-hidden">
-        <AssetPanel />
-      </div>
-    </div>
-  )
-}
+// ── Left panel — asset library + SFX generation (tabbed) ───────────────────────
+const LEFT_TABS = [['assets', '素材'], ['sfx', '音效']]
 
-// ── Right panel — clip properties only (effects removed) ───────────────────────
-function RightPanel({ width }) {
+function LeftPanel() {
+  const [tab, setTab] = useState('assets')
   return (
-    <div className="flex flex-col h-full bg-[#1a1a1a]" style={{ width }}>
-      <div className="flex border-b border-[#2a2a2a] shrink-0 px-3 py-2 text-xs text-white">屬性</div>
+    <div className="flex flex-col h-full bg-[#1a1a1a]">
+      <div className="flex border-b border-[#2a2a2a] shrink-0">
+        {LEFT_TABS.map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`flex-1 py-1.5 text-xs transition-colors ${tab === id ? 'text-white border-b-2 border-[#6d5efc]' : 'text-[#555] hover:text-[#888]'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="flex-1 overflow-hidden">
-        <PropertyPanel />
+        {tab === 'assets' ? <AssetPanel /> : <SfxPanel />}
       </div>
     </div>
   )
 }
 
 // ── Root App ───────────────────────────────────────────────────────────────────
+// Layout: left column (assets/SFX on top · video preview bottom-left) | right
+// column (full-height timeline). No properties panel.
 export default function App() {
   const [showProjectModal, setShowProjectModal] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -149,32 +150,25 @@ export default function App() {
     setSettingsDefaultTab(tab)
     setSettingsOpen(true)
   }
-  // Narrowed — App-level only needs projectId for the global file-drop upload.
   const projectId = useProjectStore(s => s.project?.id)
   const bumpAssetVersion = useProjectStore(s => s.bumpAssetVersion)
   const { uploadAsset } = useProject()
   useKeyboardShortcuts()
 
-  // ── Resizable panel sizes ──────────────────────────────────────────────────
+  // ── Resizable layout ────────────────────────────────────────────────────────
   const containerRef = useRef(null)
-  const [topHeight, setTopHeight] = useState(0.45)
-  const [leftWidth, setLeftWidth] = useState(240)
-  const [rightWidth, setRightWidth] = useState(280)
+  const [leftColWidth, setLeftColWidth] = useState(360)   // left column width (px)
+  const [leftTopFrac, setLeftTopFrac] = useState(0.45)    // panel vs preview split in left column
 
-  const handleTopResize = useCallback((_, clientY) => {
-    const container = containerRef.current
-    if (!container) return
-    const rect = container.getBoundingClientRect()
-    const newFrac = Math.max(0.2, Math.min(0.75, (clientY - rect.top) / rect.height))
-    setTopHeight(newFrac)
+  const handleLeftColResize = useCallback((_, clientX) => {
+    setLeftColWidth(Math.max(260, Math.min(600, clientX)))
   }, [])
 
-  const handleLeftResize = useCallback((_, clientX) => {
-    setLeftWidth(Math.max(180, Math.min(400, clientX)))
-  }, [])
-
-  const handleRightResize = useCallback((_, clientX) => {
-    setRightWidth(Math.max(200, Math.min(450, window.innerWidth - clientX)))
+  const handleLeftTopResize = useCallback((_, clientY) => {
+    const c = containerRef.current
+    if (!c) return
+    const rect = c.getBoundingClientRect()
+    setLeftTopFrac(Math.max(0.2, Math.min(0.8, (clientY - rect.top) / rect.height)))
   }, [])
 
   // Global OS file drop
@@ -212,8 +206,6 @@ export default function App() {
     }
   }, [projectId])
 
-  const topPct = `${topHeight * 100}%`
-
   return (
     <div className="flex flex-col h-screen bg-[#0d0d0d] text-gray-200 font-sans overflow-hidden">
       <Header
@@ -221,23 +213,22 @@ export default function App() {
         onOpenSettings={() => openSettings()}
       />
 
-      <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden">
-        {/* Upper: Left (assets) | Preview (center) | Right (properties) */}
-        <div className="flex shrink-0 overflow-hidden" style={{ height: topPct }}>
-          <LeftPanel width={leftWidth} />
-          <Resizer direction="horizontal" onResize={handleLeftResize} />
-          <div className="flex-1 overflow-hidden">
+      <div ref={containerRef} className="flex-1 flex overflow-hidden">
+        {/* Left column: assets/SFX (top) + video preview (bottom-left) */}
+        <div className="flex flex-col overflow-hidden shrink-0" style={{ width: leftColWidth }}>
+          <div className="overflow-hidden" style={{ height: `${leftTopFrac * 100}%` }}>
+            <LeftPanel />
+          </div>
+          <Resizer direction="vertical" onResize={handleLeftTopResize} />
+          <div className="flex-1 overflow-hidden bg-[#0d0d0d] min-h-0">
             <PreviewPanel />
           </div>
-          <Resizer direction="horizontal" onResize={handleRightResize} />
-          <RightPanel width={rightWidth} />
         </div>
 
-        {/* Horizontal divider */}
-        <Resizer direction="vertical" onResize={handleTopResize} />
+        <Resizer direction="horizontal" onResize={handleLeftColResize} />
 
-        {/* Lower: Timeline */}
-        <div className="flex-1 overflow-hidden">
+        {/* Right: full-height timeline */}
+        <div className="flex-1 overflow-hidden min-w-0">
           <Timeline />
         </div>
       </div>
@@ -246,6 +237,7 @@ export default function App() {
       {settingsOpen && <SettingsModal defaultTab={settingsDefaultTab} onClose={() => setSettingsOpen(false)} />}
 
       <Toast />
+      <AudioGenIndicator />
 
       {/* Global drop overlay */}
       {globalDropping && projectId && (

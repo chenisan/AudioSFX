@@ -146,6 +146,11 @@ export default function Timeline() {
     // Don't capture mousedowns on the per-track drag handle — calling
     // preventDefault here would block the native HTML5 dragstart.
     if (e.target.closest('[data-track-drag-handle]')) return
+    // Don't hijack interactive controls in the track labels (volume slider,
+    // mute/lock buttons, rename input, menus). The preventDefault below would
+    // otherwise block the native <input type="range"> drag — that's why the
+    // track-volume slider couldn't be moved.
+    if (e.target.closest('input, button, select, textarea')) return
 
     // Pan path: middle-click OR alt+left-click. Eats the event before
     // rubber-band logic so neither selection nor the browser's middle-click
@@ -314,10 +319,7 @@ export default function Timeline() {
           {showAddMenu && (
             <div className="absolute left-0 top-full mt-1 bg-[#2a2a2a] border border-[#444] rounded shadow-lg z-50 min-w-[100px]">
               <button onClick={() => handleAddTrack('video')} className="block w-full text-left px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#3a3a3a]">🎬 影片軌</button>
-              <button onClick={() => handleAddTrack('text')} className="block w-full text-left px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#3a3a3a]">🔤 文字軌</button>
-              <button onClick={() => handleAddTrack('audio')} className="block w-full text-left px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#3a3a3a]">🎵 音樂軌</button>
-              <div className="border-t border-[#333] my-0.5" />
-              <button onClick={() => { addColorFillClip('#ffffff'); setShowAddMenu(false) }} className="block w-full text-left px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#3a3a3a]">🎨 純色底</button>
+              <button onClick={() => handleAddTrack('audio')} className="block w-full text-left px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#3a3a3a]">🔊 音軌</button>
             </div>
           )}
         </div>
@@ -451,7 +453,7 @@ export default function Timeline() {
       {/* Main scrollable area */}
       <div
         ref={contentRef}
-        className="flex-1 overflow-x-auto overflow-y-hidden"
+        className="flex-1 overflow-auto"
         data-timeline-content
         onWheel={handleWheel}
         onClick={() => showAddMenu && setShowAddMenu(false)}
@@ -459,8 +461,8 @@ export default function Timeline() {
         onDrop={onTimelineAssetDrop}
       >
         <div style={{ minWidth: totalWidth + LABEL_WIDTH, position: 'relative' }}>
-          {/* Ruler row */}
-          <div className="flex border-b border-[#2a2a2a] relative z-10" style={{ height: RULER_HEIGHT }}>
+          {/* Ruler row — sticky so it stays pinned while many tracks scroll vertically */}
+          <div className="flex border-b border-[#2a2a2a] sticky top-0 z-40 bg-[#1a1a1a]" style={{ height: RULER_HEIGHT }}>
             <div style={{ width: LABEL_WIDTH, flexShrink: 0 }} className="bg-[#1a1a1a] border-r border-[#2a2a2a]" />
             <div className="relative flex-1 bg-[#111] overflow-hidden">
               <TimeRuler />

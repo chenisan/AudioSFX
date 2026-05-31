@@ -83,7 +83,43 @@ function migrateSegmentKinds(timeline: Timeline): boolean {
   return changed
 }
 
+// ── Manual-save working copies ───────────────────────────────────────────────
+// Edits are staged in memory (writeProject without toDisk) and only flushed to
+// project.yaml on an explicit save (flushProject), so the editor doesn't write
+// to disk on every mutation. A staged copy shadows the on-disk version for all
+// reads until it's flushed or the process restarts.
+const workingCopies = new Map<string, Project>()
+
+/** Write the staged working copy (if any) to disk and clear it. */
+export async function flushProject(id: string): Promise<Project> {
+  return withProjectLock(id, async () => {
+    const staged = workingCopies.get(id)
+    if (!staged) return readProject(id)          // nothing unsaved → return current
+    await writeProject(staged, { toDisk: true }) // persists + clears the working copy
+    return staged
+  })
+}
+
+/** True when there are unsaved (in-memory) edits for this project. */
+export function hasUnsaved(id: string): boolean {
+  return workingCopies.has(id)
+}
+
+/** Manual save: persist the client's full project (authoritative) to disk and
+ *  clear the staged working copy. */
+export async function saveProjectToDisk(id: string, data: Partial<Project>): Promise<Project> {
+  return withProjectLock(id, async () => {
+    const base = await readProject(id)
+    const merged = { ...base, ...data, id, updatedAt: new Date().toISOString() }
+    merged.timeline = ensureTimeline(merged.timeline)
+    await writeProject(merged, { toDisk: true })
+    return merged
+  })
+}
+
 function readProjectSync(id: string): Project {
+  const staged = workingCopies.get(id)
+  if (staged) return staged
   const file = projectFile(id)
   if (!fs.existsSync(file)) throw new Error(`Project not found: ${id}`)
   const raw = fs.readFileSync(file, 'utf8')
@@ -100,6 +136,8 @@ function readProjectSync(id: string): Project {
 }
 
 async function readProject(id: string): Promise<Project> {
+  const staged = workingCopies.get(id)
+  if (staged) return staged              // unsaved edits shadow the on-disk copy
   const file = projectFile(id)
   try {
     const raw = await fsp.readFile(file, 'utf8')
@@ -122,22 +160,29 @@ async function readProject(id: string): Promise<Project> {
     // project, and emitting SSE for each spams every connected client with
     // events it would just dedup by updatedAt. The frontend dedups anyway,
     // but skipping the emit avoids the round-trip entirely.
-    if (needsWrite) await writeProject(project, { silent: true })
+    if (needsWrite) await writeProject(project, { silent: true, toDisk: true })
     return project
   } catch {
     throw new Error(`Project not found: ${id}`)
   }
 }
 
-async function writeProject(project: Project, opts: { silent?: boolean } = {}) {
+async function writeProject(project: Project, opts: { silent?: boolean; toDisk?: boolean } = {}) {
+  // Manual-save default: stage the edit in memory only. The real disk write
+  // happens on explicit flush (toDisk: true), on createProject, and on
+  // load-time migrations. This is why editing no longer hits project.yaml on
+  // every mutation.
+  if (!opts.toDisk) {
+    workingCopies.set(project.id, project)
+    if (!opts.silent) emitProjectChanged({ projectId: project.id, updatedAt: project.updatedAt })
+    return
+  }
   await fsp.mkdir(projectDir(project.id), { recursive: true })
   await fsp.mkdir(getAssetDir(project.id), { recursive: true })
   await fsp.mkdir(getOutputDir(project.id), { recursive: true })
   await fsp.writeFile(projectFile(project.id), yaml.dump(project), 'utf8')
+  workingCopies.delete(project.id)   // flushed → on-disk copy is the source of truth again
   if (opts.silent) return
-  // Notify SSE subscribers (front-end) so an external mutation (e.g. MCP)
-  // triggers a reload. Migration writes don't bump updatedAt → front-end
-  // dedups self-echoes by comparing this timestamp.
   emitProjectChanged({ projectId: project.id, updatedAt: project.updatedAt })
 }
 
@@ -160,7 +205,7 @@ export async function createProject(
     updatedAt: now,
     ownerId,
   }
-  await writeProject(project)
+  await writeProject(project, { toDisk: true })   // new project must exist on disk immediately
   return project
 }
 
@@ -178,6 +223,7 @@ export async function updateProject(id: string, updates: Partial<Project>): Prom
 }
 
 export async function deleteProject(id: string) {
+  workingCopies.delete(id)
   const dir = projectDir(id)
   try {
     await fsp.rm(dir, { recursive: true })
@@ -236,7 +282,7 @@ export async function addTrack(
     const project = await readProject(projectId)
     const tracks = project.timeline.tracks
     const count = tracks.filter(t => t.type === type).length
-    const typeNames: Record<TrackType, string> = { video: '影片', text: '文字', audio: '音樂', script: '腳本生成軌' }
+    const typeNames: Record<TrackType, string> = { video: '影片', text: '文字', audio: '音軌', script: '腳本生成軌' }
     const maxOrder = Math.max(-1, ...tracks.map(t => t.order))
     const order = type === 'audio' ? -1 - count : maxOrder + 1
     const trackId = nextTrackId()
@@ -387,7 +433,7 @@ export async function removeTrack(projectId: string, trackId: string): Promise<P
 // CRUD functions own those. `id` and `type` shouldn't change after creation;
 // `clips` is mutated through addClip / updateClip / etc.; `order` is left
 // alone here because reorder is a multi-track operation we don't yet expose.
-const TRACK_MUTABLE_KEYS = ['name', 'locked', 'hidden', 'muted', 'gapMode', 'heightSize', 'order'] as const
+const TRACK_MUTABLE_KEYS = ['name', 'locked', 'hidden', 'muted', 'volume', 'gapMode', 'heightSize', 'order'] as const
 type TrackMutableKey = typeof TRACK_MUTABLE_KEYS[number]
 
 export async function updateTrack(projectId: string, trackId: string, updates: Partial<Track>): Promise<Project> {

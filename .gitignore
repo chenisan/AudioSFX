@@ -12,6 +12,9 @@ engines/woosh/*
 engines/ffmpeg-shared/
 engines/*/_svc.*
 
+# Ad-hoc generated SFX (test output)
+/generated_sfx/
+
 data/projects/
 data/outputs/
 data/tmp/

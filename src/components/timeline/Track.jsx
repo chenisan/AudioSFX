@@ -39,6 +39,8 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
   const toggleTrackLocked = useProjectStore(s => s.toggleTrackLocked)
   const toggleTrackHidden = useProjectStore(s => s.toggleTrackHidden)
   const toggleTrackMuted = useProjectStore(s => s.toggleTrackMuted)
+  const setTrackVolume = useProjectStore(s => s.setTrackVolume)
+  const setTrackVolumeLive = useProjectStore(s => s.setTrackVolumeLive)
   const setTrackHeight = useProjectStore(s => s.setTrackHeight)
   const setTrackGapMode = useProjectStore(s => s.setTrackGapMode)
   const setLastCursor = useProjectStore(s => s.setLastCursor)
@@ -50,6 +52,16 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
   const [subMenu, setSubMenu] = useState(null)  // 'height' | 'waveform'
   const inputRef = useRef(null)
   const menuRef = useRef(null)
+  const volTimerRef = useRef(null)
+
+  // Slider drag fires onChange continuously → update the store live (smooth,
+  // no server hit) and debounce a single PATCH so we don't flood the backend
+  // with one disk write per pixel (that froze the UI).
+  const handleVolumeChange = (v) => {
+    setTrackVolumeLive(track.id, v)
+    if (volTimerRef.current) clearTimeout(volTimerRef.current)
+    volTimerRef.current = setTimeout(() => setTrackVolume(track.id, v), 350)
+  }
 
   if (!track) return null
   const clips = track.clips ?? []
@@ -185,14 +197,30 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
             {showMenu && (
               <>
                 <div className="fixed inset-0 z-40" onClick={closeMenu} />
-                <div className="absolute left-0 bottom-full mb-1 bg-[#2a2a2a] border border-[#444] rounded-lg shadow-xl z-50 py-1 min-w-[130px]">
+                <div className="absolute left-0 bottom-full mb-1 bg-[#2a2a2a] border border-[#444] rounded-lg shadow-xl z-50 py-1 min-w-[150px]">
+                  {/* Track-level volume (audio tracks) */}
+                  {track.type === 'audio' && (
+                    <div className="px-3 py-2 border-b border-[#3a3a3a]" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-between text-[10px] text-[#888] mb-1">
+                        <span>整軌音量</span>
+                        <span className="font-mono text-[#ccc]">{Math.round((track.volume ?? 1) * 100)}%</span>
+                      </div>
+                      <input
+                        type="range" min={0} max={4} step={0.01}
+                        value={track.volume ?? 1}
+                        onChange={e => handleVolumeChange(+e.target.value)}
+                        className="w-full h-1 accent-[#6d5efc] cursor-pointer"
+                        title="整條音軌的音量（與各片段音量相乘）"
+                      />
+                    </div>
+                  )}
+
                   {/* Track height */}
-                  <div
-                    className="relative"
-                    onMouseEnter={() => setSubMenu('height')}
-                    onMouseLeave={() => setSubMenu(null)}
-                  >
-                    <button className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#3a3a3a]">
+                  <div className="relative">
+                    <button
+                      onClick={() => setSubMenu(subMenu === 'height' ? null : 'height')}
+                      className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#3a3a3a]"
+                    >
                       <span>資料軌高度</span>
                       <span className="text-[#666] text-[10px] ml-2">›</span>
                     </button>
@@ -216,12 +244,11 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
                   {/* Waveform size — audio-only alias for track height (the audio
                       clip IS the waveform, so amplitude = trackH). */}
                   {track.type === 'audio' && (
-                    <div
-                      className="relative"
-                      onMouseEnter={() => setSubMenu('waveform')}
-                      onMouseLeave={() => setSubMenu(null)}
-                    >
-                      <button className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#3a3a3a]">
+                    <div className="relative">
+                      <button
+                        onClick={() => setSubMenu(subMenu === 'waveform' ? null : 'waveform')}
+                        className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#3a3a3a]"
+                      >
                         <span>音訊波形大小</span>
                         <span className="text-[#666] text-[10px] ml-2">›</span>
                       </button>
@@ -245,12 +272,11 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
 
                   {/* Gap fill mode — video tracks only, affects only the main track at render time */}
                   {track.type === 'video' && (
-                    <div
-                      className="relative"
-                      onMouseEnter={() => setSubMenu('gap')}
-                      onMouseLeave={() => setSubMenu(null)}
-                    >
-                      <button className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#3a3a3a]">
+                    <div className="relative">
+                      <button
+                        onClick={() => setSubMenu(subMenu === 'gap' ? null : 'gap')}
+                        className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#3a3a3a]"
+                      >
                         <span>空白填法</span>
                         <span className="text-[#666] text-[10px] ml-2">›</span>
                       </button>

@@ -146,6 +146,19 @@ export default function AssetPanel() {
   const [sortMode, setSortMode] = useState(() => localStorage.getItem('13soul.assetSort') || 'name')
   useEffect(() => { localStorage.setItem('13soul.assetSort', sortMode) }, [sortMode])
   const fileInputRef = useRef(null)
+  const audioRef = useRef(null)   // hidden player for click-to-audition audio assets
+
+  // Click an asset → preview-select it; for audio, also play it immediately
+  // (click is a user gesture, so autoplay is allowed). Re-click restarts.
+  const handleSelect = (filename, type) => {
+    setPreviewAsset(filename, type)
+    if (type === 'audio' && projectId && audioRef.current) {
+      const el = audioRef.current
+      el.src = `/assets/${projectId}/${encodeURIComponent(filename)}`
+      el.currentTime = 0
+      el.play().catch(() => {})
+    }
+  }
 
   const filteredAssets = (() => {
     const base = typeFilter === 'all'
@@ -308,7 +321,7 @@ export default function AssetPanel() {
                 projectId={projectId}
                 onDelete={handleDelete}
                 isActive={previewAsset?.filename === asset.filename}
-                onSelect={setPreviewAsset}
+                onSelect={handleSelect}
               />
             )}
           />
@@ -321,6 +334,9 @@ export default function AssetPanel() {
           <div className="text-[#6d5efc] text-sm font-medium">放開以匯入</div>
         </div>
       )}
+
+      {/* Hidden player — click-to-audition audio assets */}
+      <audio ref={audioRef} className="hidden" />
     </div>
   )
 }

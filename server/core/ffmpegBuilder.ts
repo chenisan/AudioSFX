@@ -413,7 +413,7 @@ export async function buildFfmpegPlan(
         trimEnd,
         timelineStart: c.start,
         speed,
-        volume: c.volume ?? 1,
+        volume: (c.volume ?? 1) * ((t as any).volume ?? 1),   // fold in track-level volume
         fadeIn: Math.max(0, c.fadeIn?.duration ?? 0),
         fadeOut: Math.max(0, c.fadeOut?.duration ?? 0),
         volumeKF: c.volumeKF,

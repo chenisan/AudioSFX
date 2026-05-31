@@ -73,7 +73,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`updateProjectMeta failed: ${res.status}`)
         const updated = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
       } catch (e) {
         console.error('[updateProjectMeta]', e)
       }
@@ -98,7 +98,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`setExportRange failed: ${res.status}`)
         const updated = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
       } catch (e) {
         console.error('[setExportRange]', e)
       }
@@ -119,7 +119,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`addTrack failed: ${res.status}`)
         const { project: updated, trackId } = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
         return trackId
       } catch (e) {
         console.error('[addTrack]', e)
@@ -140,7 +140,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`addTrackWithClip failed: ${res.status}`)
         const { project: updated, trackId } = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
         return trackId
       } catch (e) {
         console.error('[addTrackWithClip]', e)
@@ -161,7 +161,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`ensureScriptTrack failed: ${res.status}`)
         const { project: updated, trackId } = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
         return trackId
       } catch (e) {
         console.error('[ensureScriptTrack]', e)
@@ -190,7 +190,7 @@ export function createProjectDocSlice(set, get) {
         const { project: updated, trackId } = await res.json()
         set({
           project: updated,
-          isDirty: false,
+          isDirty: true,
           selectedClip: { trackId, index: 0 },
           selectedClips: [{ trackId, index: 0 }],
         })
@@ -273,7 +273,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (res.ok) {
           const updated = await res.json()
-          set({ project: updated, isDirty: false })
+          set({ project: updated, isDirty: true })
         }
       } catch (e) {
         console.error('[addStickerClip persist]', e)
@@ -305,7 +305,7 @@ export function createProjectDocSlice(set, get) {
           throw new Error(err.error || `import-srt failed: ${res.status}`)
         }
         const { project: updated, count } = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
         return count
       } catch (e) {
         console.error('[importSRT]', e)
@@ -336,7 +336,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`removeTrack failed: ${res.status}`)
         const updated = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
       } catch (e) {
         console.error('[removeTrack]', e)
       }
@@ -366,7 +366,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`patchTrack failed: ${res.status}`)
         const updated = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
       } catch (e) {
         console.error('[patchTrack]', e)
       }
@@ -415,7 +415,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`reorder failed: ${res.status}`)
         const updated = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
       } catch (e) {
         console.error('[swapTrackOrder]', e)
       }
@@ -449,6 +449,30 @@ export function createProjectDocSlice(set, get) {
     /** Gap mode only applies when this track renders as the main video track. */
     setTrackGapMode(trackId, mode) {
       return get()._patchTrack(trackId, { gapMode: mode }, t => ({ ...t, gapMode: mode }))
+    },
+
+    /** Track-level volume (gain). 1 = unity; multiplies each clip's own volume.
+     *  PATCHes the server — call once on commit (drag end), NOT per drag tick. */
+    setTrackVolume(trackId, volume) {
+      const v = Math.max(0, Math.min(4, volume))
+      return get()._patchTrack(trackId, { volume: v }, t => ({ ...t, volume: v }))
+    },
+
+    /** Local-only volume update for smooth slider dragging — updates the store
+     *  (so preview reacts live) WITHOUT hitting the server. The drag handler
+     *  debounces a single setTrackVolume() to persist after the drag settles. */
+    setTrackVolumeLive(trackId, volume) {
+      const v = Math.max(0, Math.min(4, volume))
+      set(state => state.project ? {
+        project: {
+          ...state.project,
+          timeline: {
+            ...state.project.timeline,
+            tracks: state.project.timeline.tracks.map(t => t.id === trackId ? { ...t, volume: v } : t),
+          },
+        },
+        isDirty: true,
+      } : {})
     },
 
     // ── Clip actions ─────────────────────────────────
@@ -487,7 +511,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`addClip failed: ${res.status}`)
         const updated = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
       } catch (e) {
         console.error('[addClip]', e)
       }
@@ -565,7 +589,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`updateClipsBatch failed: ${res.status}`)
         const { project: updated } = await res.json()
-        if (updated) set({ project: updated, isDirty: false })
+        if (updated) set({ project: updated, isDirty: true })
       } catch (e) {
         console.error('[updateClipsBatch]', e)
       }
@@ -599,7 +623,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`updateClip failed: ${res.status}`)
         const updated = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
       } catch (e) {
         console.error('[updateClip]', e)
       }
@@ -631,7 +655,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`removeClip failed: ${res.status}`)
         const updated = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
       } catch (e) {
         console.error('[removeClip]', e)
       }
@@ -710,7 +734,7 @@ export function createProjectDocSlice(set, get) {
         const { project: updated, newIndex } = await res.json()
         set({
           project: updated,
-          isDirty: false,
+          isDirty: true,
           selectedClip: { trackId: toTrackId, index: newIndex },
         })
       } catch (e) {
@@ -834,7 +858,7 @@ export function createProjectDocSlice(set, get) {
         const updated = await res.json()
         set({
           project: updated,
-          isDirty: false,
+          isDirty: true,
           selectedClip: { trackId: selectedClip.trackId, index: selectedClip.index + 1 },
           // Nudge the playhead 10ms into the right half so the user can
           // press split again immediately. Without this the playhead sits
@@ -871,7 +895,7 @@ export function createProjectDocSlice(set, get) {
           throw new Error(err.error || `delete-left-at-playhead failed: ${res.status}`)
         }
         const updated = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
       } catch (e) {
         console.error('[deleteLeftAtPlayhead]', e)
       }
@@ -899,7 +923,7 @@ export function createProjectDocSlice(set, get) {
           throw new Error(err.error || `delete-right-at-playhead failed: ${res.status}`)
         }
         const updated = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
       } catch (e) {
         console.error('[deleteRightAtPlayhead]', e)
       }
@@ -927,7 +951,7 @@ export function createProjectDocSlice(set, get) {
         const updated = await res.json()
         set({
           project: updated,
-          isDirty: false,
+          isDirty: true,
           selectedClip: { trackId: selectedClip.trackId, index: selectedClip.index + 1 },
         })
       } catch (e) {
@@ -961,7 +985,7 @@ export function createProjectDocSlice(set, get) {
           throw new Error(err.error || `remove-clips failed: ${res.status}`)
         }
         const updated = await res.json()
-        set({ project: updated, isDirty: false, selectedClip: null, selectedClips: [] })
+        set({ project: updated, isDirty: true, selectedClip: null, selectedClips: [] })
       } catch (e) {
         console.error('[removeSelectedClips]', e)
       }
@@ -1002,7 +1026,7 @@ export function createProjectDocSlice(set, get) {
         }
         const updated = await res.json()
         const firstNewIndex = track.clips.length
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
         const newSelection = clipboard.clips.map((_, i) => ({
           trackId, index: firstNewIndex + i,
         }))
@@ -1077,7 +1101,7 @@ export function createProjectDocSlice(set, get) {
         })
         if (!res.ok) throw new Error(`commitDragChanges failed: ${res.status}`)
         const { project: updated } = await res.json()
-        set({ project: updated, isDirty: false })
+        set({ project: updated, isDirty: true })
       } catch (e) {
         console.error('[commitDragChanges]', e)
       }
