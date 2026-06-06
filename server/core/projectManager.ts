@@ -83,6 +83,27 @@ function migrateSegmentKinds(timeline: Timeline): boolean {
   return changed
 }
 
+/**
+ * One-time migration: fold a track's deprecated `eq` field into the `plugins`
+ * insert chain (as a single eq plugin). Runs on load; returns true if anything
+ * changed so the caller persists. After this runs, EQ lives only in `plugins`.
+ */
+function migrateTrackEqToPlugins(timeline: Timeline): boolean {
+  let changed = false
+  for (const track of timeline.tracks) {
+    const t = track as any
+    if (!t.eq) continue
+    if (!Array.isArray(t.plugins)) {
+      const bands = Array.isArray(t.eq.bands) ? t.eq.bands : []
+      t.plugins = [{ id: 'eq', type: 'eq', enabled: !!t.eq.enabled, params: { bands } }]
+    }
+    // plugins already present → just drop the stale eq mirror.
+    delete t.eq
+    changed = true
+  }
+  return changed
+}
+
 // ── Manual-save working copies ───────────────────────────────────────────────
 // Edits are staged in memory (writeProject without toDisk) and only flushed to
 // project.yaml on an explicit save (flushProject), so the editor doesn't write
@@ -131,6 +152,7 @@ function readProjectSync(id: string): Project {
     needsWrite = true
   }
   if (migrateSegmentKinds(project.timeline)) needsWrite = true
+  if (migrateTrackEqToPlugins(project.timeline)) needsWrite = true
   if (needsWrite) fs.writeFileSync(file, yaml.dump(project), 'utf8')
   return project
 }
@@ -156,6 +178,7 @@ async function readProject(id: string): Promise<Project> {
       if (tr.clips.length !== before) needsWrite = true
     }
     if (migrateSegmentKinds(project.timeline)) needsWrite = true
+    if (migrateTrackEqToPlugins(project.timeline)) needsWrite = true
     // Migration writes are silent: listProjects can trigger one per stale
     // project, and emitting SSE for each spams every connected client with
     // events it would just dedup by updatedAt. The frontend dedups anyway,
@@ -433,7 +456,7 @@ export async function removeTrack(projectId: string, trackId: string): Promise<P
 // CRUD functions own those. `id` and `type` shouldn't change after creation;
 // `clips` is mutated through addClip / updateClip / etc.; `order` is left
 // alone here because reorder is a multi-track operation we don't yet expose.
-const TRACK_MUTABLE_KEYS = ['name', 'locked', 'hidden', 'muted', 'volume', 'eq', 'gapMode', 'heightSize', 'order'] as const
+const TRACK_MUTABLE_KEYS = ['name', 'locked', 'hidden', 'muted', 'volume', 'plugins', 'gapMode', 'heightSize', 'order'] as const
 type TrackMutableKey = typeof TRACK_MUTABLE_KEYS[number]
 
 export async function updateTrack(projectId: string, trackId: string, updates: Partial<Track>): Promise<Project> {

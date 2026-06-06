@@ -233,6 +233,38 @@ export interface TrackEq {
   bands: TrackEqBand[]   // fixed 5-band parametric (low-shelf / 3× peaking / high-shelf)
 }
 
+// ── Track effect plugins (insert chain) ──────────────────────────────────────
+// Each track carrying audio can host an ordered chain of effect plugins, applied
+// in array order. EQ is the first member; compressor / limiter follow (Step 2).
+// Preview = Web Audio nodes (audioEngine.js); render = ffmpeg filters
+// (ffmpegBuilder.ts). Per plugin: `enabled` is the single on/off source of truth
+// (the params object holds no enabled flag).
+export type TrackPluginType = 'eq' | 'compressor' | 'limiter'
+
+export interface EqPluginParams {
+  bands: TrackEqBand[]   // fixed 5-band parametric
+}
+export interface CompressorPluginParams {
+  threshold: number   // dB
+  ratio: number       // n:1
+  attack: number      // ms
+  release: number     // ms
+  knee: number        // dB
+  makeup: number      // dB
+}
+export interface LimiterPluginParams {
+  threshold: number   // dB (ceiling)
+  release: number     // ms
+}
+export type TrackPluginParams = EqPluginParams | CompressorPluginParams | LimiterPluginParams
+
+export interface TrackPlugin {
+  id: string                   // stable id (used for reorder / remove)
+  type: TrackPluginType
+  enabled: boolean
+  params: TrackPluginParams
+}
+
 // Track fields are tagged the same way as VideoSegment:
 //   [RENDER]    — affects ffmpeg output
 //   [TRANSPORT] — survives to project.yaml but UI-only
@@ -246,7 +278,8 @@ export interface Track {
   hidden?: boolean                          // [RENDER] (hidden tracks dropped from graph entirely)
   muted?: boolean                           // [RENDER] (audio dropped, video kept)
   volume?: number                           // [RENDER] track-level audio gain (0–4); multiplies each clip's volume
-  eq?: TrackEq                              // [RENDER] track-level parametric EQ (any track carrying audio)
+  eq?: TrackEq                              // [RENDER] DEPRECATED — migrated into `plugins` on load; kept only as migration source
+  plugins?: TrackPlugin[]                   // [RENDER] ordered effect insert chain (eq/compressor/limiter); any track carrying audio
   gapMode?: 'black' | 'freeze'              // [RENDER] video tracks only — main-chain gap-fill behaviour
   // ── UI-only persisted preferences — do not grow without explicit reason ──
   heightSize?: 'small' | 'default' | 'large' // [TRANSPORT] timeline row height

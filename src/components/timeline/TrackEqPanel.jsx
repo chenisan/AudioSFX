@@ -1,80 +1,34 @@
 import { useRef } from 'react'
-import { useProjectStore } from '../../stores/projectStore'
-
-// Fixed 5-band parametric EQ. Mirrored by audioEngine.js (Web Audio biquads,
-// preview) and ffmpegBuilder.ts (bass/equalizer/treble, export). Keep the band
-// shape (type/freq/gain/q) identical across all three.
-export const DEFAULT_EQ_BANDS = [
-  { type: 'lowshelf',  freq: 80,   gain: 0, q: 0.7 },
-  { type: 'peaking',   freq: 250,  gain: 0, q: 1.0 },
-  { type: 'peaking',   freq: 1000, gain: 0, q: 1.0 },
-  { type: 'peaking',   freq: 3500, gain: 0, q: 1.0 },
-  { type: 'highshelf', freq: 8000, gain: 0, q: 0.7 },
-]
+import { DEFAULT_EQ_BANDS } from '../../utils/trackPlugins'
 
 const BAND_LABELS = ['低架', '低中', '中', '高中', '高架']
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 const fmtFreq = (f) => (f >= 1000 ? `${(f / 1000).toFixed(f % 1000 === 0 ? 0 : 1)}k` : `${Math.round(f)}`)
 
-// Track-level EQ editor rendered inside the track "⋯更多" flyout. Live updates
-// during drag (setTrackEqLive, no server hit) + a debounced setTrackEq commit,
-// mirroring the 整軌音量 slider pattern.
-export default function TrackEqPanel({ track }) {
-  const setTrackEq = useProjectStore(s => s.setTrackEq)
-  const setTrackEqLive = useProjectStore(s => s.setTrackEqLive)
+// EQ band editor — stateless w.r.t. the store. Receives the eq plugin's `bands`
+// and an `onChange(nextBands, persist)` callback; TrackFxPanel owns the plugins
+// array and the live (store-only) + debounced (server) persist. `persist=false`
+// = live drag update; `persist=true` = commit (reset / final value).
+export default function TrackEqPanel({ bands, onChange }) {
   const timerRef = useRef(null)
 
-  // Current EQ, seeded with flat defaults when the track has none yet.
-  const hasBands = track.eq && Array.isArray(track.eq.bands) && track.eq.bands.length > 0
-  const enabled = !!track.eq?.enabled
-  const bands = hasBands ? track.eq.bands : DEFAULT_EQ_BANDS
-
-  // Live + debounced persist (band-param drags). Marks the project dirty until save.
+  // Live update now, debounce a persist after the drag settles.
   const liveCommit = (next) => {
-    setTrackEqLive(track.id, next)
+    onChange(next, false)
     if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => setTrackEq(track.id, next), 300)
-  }
-
-  // Structural toggle (enable/disable) — persist immediately; it rebuilds the
-  // preview node chain (EQ structure is part of the clip key), so no debounce.
-  const toggleEnabled = () => {
-    const next = { enabled: !enabled, bands: bands.map(b => ({ ...b })) }
-    setTrackEqLive(track.id, next)
-    setTrackEq(track.id, next)
+    timerRef.current = setTimeout(() => onChange(next, true), 300)
   }
 
   const updateBand = (i, field, value) => {
-    const next = {
-      enabled: true,   // editing a band implies the user wants EQ on
-      bands: bands.map((b, j) => (j === i ? { ...b, [field]: value } : { ...b })),
-    }
-    liveCommit(next)
+    liveCommit(bands.map((b, j) => (j === i ? { ...b, [field]: value } : { ...b })))
   }
 
-  const reset = () => {
-    const next = { enabled, bands: DEFAULT_EQ_BANDS.map(b => ({ ...b })) }
-    setTrackEqLive(track.id, next)
-    setTrackEq(track.id, next)
-  }
+  const reset = () => onChange(DEFAULT_EQ_BANDS.map(b => ({ ...b })), true)
 
   return (
-    <div
-      className="absolute left-full top-0 ml-1 bg-[#2a2a2a] border border-[#444] rounded-lg shadow-xl z-50 p-3 w-[300px]"
-      onClick={e => e.stopPropagation()}
-    >
-      {/* Header: enable toggle + reset */}
-      <div className="flex items-center justify-between mb-2">
-        <label className="flex items-center gap-1.5 text-[11px] text-[#ccc] cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={toggleEnabled}
-            className="accent-[#6d5efc] cursor-pointer"
-          />
-          <span>EQ {enabled ? '開啟' : '關閉'}</span>
-        </label>
+    <div className="pt-1.5">
+      <div className="flex items-center justify-end mb-1.5">
         <button
           onClick={reset}
           className="text-[10px] px-1.5 py-0.5 rounded border border-[#444] text-[#888] hover:border-[#6d5efc] hover:text-[#6d5efc] transition-colors"
@@ -84,8 +38,7 @@ export default function TrackEqPanel({ track }) {
         </button>
       </div>
 
-      {/* Bands */}
-      <div className={`flex flex-col gap-1.5 ${enabled ? '' : 'opacity-40'}`}>
+      <div className="flex flex-col gap-1.5">
         {bands.map((b, i) => {
           const gain = Number(b.gain) || 0
           return (

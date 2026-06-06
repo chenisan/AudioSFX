@@ -475,23 +475,24 @@ export function createProjectDocSlice(set, get) {
       } : {})
     },
 
-    /** Track-level parametric EQ (preview via Web Audio biquads, export via
-     *  ffmpeg bass/equalizer/treble). PATCHes the server — call once on commit
-     *  (slider release / toggle), NOT per drag tick. `eq` = { enabled, bands }. */
-    setTrackEq(trackId, eq) {
-      return get()._patchTrack(trackId, { eq }, t => ({ ...t, eq }))
+    /** Track effect plugin chain (eq / compressor / limiter, applied in order).
+     *  Preview via Web Audio nodes, export via ffmpeg filters. PATCHes the
+     *  server — call once on commit (slider release / toggle / add / remove /
+     *  reorder), NOT per drag tick. `plugins` = full TrackPlugin[] array. */
+    setTrackPlugins(trackId, plugins) {
+      return get()._patchTrack(trackId, { plugins }, t => ({ ...t, plugins }))
     },
 
-    /** Local-only EQ update for smooth band-slider dragging — updates the store
+    /** Local-only plugin update for smooth param dragging — updates the store
      *  (so preview reacts live, in place, no click) WITHOUT hitting the server.
-     *  The panel debounces a single setTrackEq() to persist after the drag. */
-    setTrackEqLive(trackId, eq) {
+     *  The panel debounces a single setTrackPlugins() to persist after the drag. */
+    setTrackPluginsLive(trackId, plugins) {
       set(state => state.project ? {
         project: {
           ...state.project,
           timeline: {
             ...state.project.timeline,
-            tracks: state.project.timeline.tracks.map(t => t.id === trackId ? { ...t, eq } : t),
+            tracks: state.project.timeline.tracks.map(t => t.id === trackId ? { ...t, plugins } : t),
           },
         },
         isDirty: true,

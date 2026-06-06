@@ -49,6 +49,21 @@ function buildEqFilters(eq: TrackEq | undefined): string[] {
   return out
 }
 
+/** Extract the enabled EQ from a track's plugin insert chain → TrackEq (or
+ * undefined when there's no enabled eq plugin). Mirrors the preview side
+ * (PreviewPanel engineClipDescriptors). Falls back to the legacy track.eq field
+ * for any data that hasn't hit the load-time migration yet. EQ is linear, so
+ * applying it per-clip here is equivalent to applying it to the track mix. */
+function eqFromTrack(track: any): TrackEq | undefined {
+  const plugins = track?.plugins
+  if (Array.isArray(plugins)) {
+    const p = plugins.find((pl: any) => pl?.type === 'eq' && pl?.enabled)
+    if (p?.params?.bands) return { enabled: true, bands: p.params.bands }
+    return undefined
+  }
+  return track?.eq as TrackEq | undefined
+}
+
 /** Build atempo filter chain. atempo's per-instance range is [0.5, 100],
  * so values below 0.5 are achieved by chaining: 0.25 = 0.5,0.5. Returns
  * an empty array when speed === 1 so the chain stays untouched.
@@ -423,14 +438,14 @@ export async function buildFfmpegPlan(
 
   const mainTrackMuted = !!mainVideoTrack?.muted
   const mainTrackVolume = (mainVideoTrack as any)?.volume ?? 1
-  const mainTrackEq = (mainVideoTrack as any)?.eq as TrackEq | undefined
+  const mainTrackEq = eqFromTrack(mainVideoTrack)
   videoSegments.forEach((seg, i) => pushVideoClipAudio(seg, mainVideoInputIdx[i], mainTrackMuted, mainTrackVolume, mainTrackEq))
 
   overlayTracks.forEach((trackSegs, ti) => {
     const ovlTrack = overlayVideoTracks[ti]
     const trackMuted = !!ovlTrack?.muted
     const trackVolume = (ovlTrack as any)?.volume ?? 1
-    const trackEq = (ovlTrack as any)?.eq as TrackEq | undefined
+    const trackEq = eqFromTrack(ovlTrack)
     trackSegs.forEach((seg, ci) => {
       pushVideoClipAudio(seg, overlayInputIdxByTrack[ti][ci], trackMuted, trackVolume, trackEq)
     })
@@ -455,7 +470,7 @@ export async function buildFfmpegPlan(
         fadeIn: Math.max(0, c.fadeIn?.duration ?? 0),
         fadeOut: Math.max(0, c.fadeOut?.duration ?? 0),
         volumeKF: c.volumeKF,
-        eq: (t as any).eq as TrackEq | undefined,
+        eq: eqFromTrack(t),
       })
     })
   })
