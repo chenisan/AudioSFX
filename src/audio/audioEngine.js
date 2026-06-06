@@ -20,7 +20,9 @@ function makeClipKey(c) {
   // eqKey only captures EQ *structure* (enabled + band count + types), not
   // band params — so toggling EQ on/off rebuilds the node chain, but tweaking
   // freq/gain/Q is applied in-place (smooth, no click; see _applyEqParams).
-  return `${c.source}|${c.timelineStart}|${c.trimStart}|${c.trimEnd}|${c.speed ?? 1}|${c.fadeIn || 0}|${c.fadeOut || 0}|${eqKey(c.eq)}`
+  // trackId included so moving a clip to another track re-routes it to the
+  // correct per-track meter bus.
+  return `${c.trackId ?? ''}|${c.source}|${c.timelineStart}|${c.trimStart}|${c.trimEnd}|${c.speed ?? 1}|${c.fadeIn || 0}|${c.fadeOut || 0}|${eqKey(c.eq)}`
 }
 
 // Structural EQ signature for clip-key dedup. Params (freq/gain/Q) deliberately
@@ -70,6 +72,11 @@ class AudioEngine {
     this.analyser = null
     this.limiter = null
     this._peakBuf = null
+
+    // Per-track meter buses: trackId → { gain, analyser, buf }. Each clip routes
+    // its tail into its track's bus.gain (gain → analyser → masterGain), so the
+    // analyser reads that track's post-EQ/post-volume mix for the track meter.
+    this.trackBuses = new Map()
 
     // Decoded AudioBuffer cache: source string → Promise<AudioBuffer>
     this.decodeCache = new Map()
@@ -126,13 +133,10 @@ class AudioEngine {
     this.limiter.connect(this.ctx.destination)
   }
 
-  // Read the current output peak (pre-limiter). Returns linear peak, dBFS, and
-  // a clip flag (raw mix reached/exceeded 0 dBFS → the limiter is engaging).
-  // Returns silence when the context isn't up yet. Cheap enough to call per rAF.
-  getOutputPeak() {
-    if (!this.analyser) return { peak: 0, db: -Infinity, clip: false }
-    const buf = this._peakBuf
-    this.analyser.getFloatTimeDomainData(buf)
+  // Scan an analyser's time-domain frame for the linear peak → {peak, db, clip}.
+  // clip = sample reached/exceeded 0 dBFS (≥ 1.0). Cheap enough to call per rAF.
+  _readPeak(analyser, buf) {
+    analyser.getFloatTimeDomainData(buf)
     let max = 0
     for (let i = 0; i < buf.length; i++) {
       const a = Math.abs(buf[i])
@@ -143,6 +147,38 @@ class AudioEngine {
       db: max > 0 ? 20 * Math.log10(max) : -Infinity,
       clip: max >= 1.0,
     }
+  }
+
+  // Read the master output peak (pre-limiter). clip=true means the raw mix hit
+  // 0 dBFS and the limiter is engaging. Silence when the context isn't up yet.
+  getOutputPeak() {
+    if (!this.analyser) return { peak: 0, db: -Infinity, clip: false }
+    return this._readPeak(this.analyser, this._peakBuf)
+  }
+
+  // Lazily build a per-track meter bus (gain → analyser → masterGain). Returns
+  // null when there's no track id / no context. Idempotent.
+  _ensureTrackBus(trackId) {
+    if (!trackId || !this.ctx) return null
+    let bus = this.trackBuses.get(trackId)
+    if (!bus) {
+      const gain = this.ctx.createGain()
+      const analyser = this.ctx.createAnalyser()
+      analyser.fftSize = 1024
+      gain.connect(analyser)
+      analyser.connect(this.masterGain)
+      bus = { gain, analyser, buf: new Float32Array(analyser.fftSize) }
+      this.trackBuses.set(trackId, bus)
+    }
+    return bus
+  }
+
+  // Read a single track's output peak (post-EQ, post-track-volume, pre-master).
+  // Silence when the track has no bus yet (nothing scheduled on it).
+  getTrackPeak(trackId) {
+    const bus = this.trackBuses.get(trackId)
+    if (!bus) return { peak: 0, db: -Infinity, clip: false }
+    return this._readPeak(bus.analyser, bus.buf)
   }
 
   setProjectId(projectId) {
@@ -199,6 +235,8 @@ class AudioEngine {
       .filter(c => c && typeof c.source === 'string')
       .map(c => ({
         source: c.source,
+        // Owning track id — routes the clip to its per-track meter bus.
+        trackId: c.trackId ?? null,
         timelineStart: Number(c.timelineStart) || 0,
         trimStart: Number(c.trimStart) || 0,
         trimEnd: Number(c.trimEnd) || 0,
@@ -216,6 +254,18 @@ class AudioEngine {
         eq: normalizeEq(c.eq),
       }))
       .filter(c => c.trimEnd > c.trimStart)
+
+    // Track meter buses: ensure one per live track, tear down buses for tracks
+    // that no longer have clips. Idempotent — safe to run every setClips.
+    const liveTrackIds = new Set(norm.map(c => c.trackId).filter(Boolean))
+    for (const tid of liveTrackIds) this._ensureTrackBus(tid)
+    for (const [tid, bus] of this.trackBuses) {
+      if (!liveTrackIds.has(tid)) {
+        try { bus.gain.disconnect() } catch {}
+        try { bus.analyser.disconnect() } catch {}
+        this.trackBuses.delete(tid)
+      }
+    }
 
     const key = norm.map(makeClipKey).join(';')
     if (key === this.clipsKey) {
@@ -391,7 +441,10 @@ class AudioEngine {
           }
         }
         source.connect(gain)
-        tail.connect(this.masterGain)
+        // Route the clip's tail into its track's meter bus (gain → analyser →
+        // master). Falls back to master directly if the clip has no track id.
+        const bus = this._ensureTrackBus(clip.trackId)
+        tail.connect(bus ? bus.gain : this.masterGain)
 
         // Clamp offset to buffer length (avoids "offset > duration" throws
         // when the trim extends past the actual decoded length).
@@ -562,6 +615,7 @@ class AudioEngine {
     this.analyser = null
     this.limiter = null
     this._peakBuf = null
+    this.trackBuses.clear()
     this.decodeCache.clear()
     this.clips = []
     this.clipsKey = ''

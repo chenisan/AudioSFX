@@ -169,6 +169,8 @@ function TimelinePreview({ project, playheadTime, isPlaying, setPlayheadTime, se
           : clipDur * clipSpeed
         out.push({
           source: c.source,
+          // Owning track id — engine routes the clip to this track's meter bus.
+          trackId: t.id,
           timelineStart: c.start ?? 0,
           trimStart,
           trimEnd: trimStart + sourceRange,

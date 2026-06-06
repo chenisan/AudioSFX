@@ -3,6 +3,7 @@ import { useProjectStore } from '../../stores/projectStore'
 import { useAssetDrop } from '../../hooks/useDragDrop'
 import Clip from './Clip'
 import TrackEqPanel from './TrackEqPanel'
+import TrackMeter from './TrackMeter'
 import { timeToPx, pxToTime } from '../../utils/timeFormat'
 
 const TRACK_TYPE_ICONS = { video: '🎬', text: '🔤', audio: '🎵', script: '🎨' }
@@ -110,10 +111,15 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
       onDragOver={(e) => { e.preventDefault(); onTrackDragOver?.(track.id) }}
       onDrop={(e) => { e.preventDefault(); onTrackDrop?.(track.id) }}
     >
-      {/* Track label */}
+      {/* Track label + per-track meter. Fixed LABEL_WIDTH so the meter lives
+          inside the gutter and the clip lane / playhead stay aligned. The meter
+          hugs the right edge → visually sits at the track's left edge. */}
       <div
-        className="flex-shrink-0 flex flex-col justify-center px-1.5 border-r border-[#2a2a2a] bg-[#1a1a1a] group cursor-pointer"
+        className="flex-shrink-0 flex border-r border-[#2a2a2a] bg-[#1a1a1a]"
         style={{ width: LABEL_WIDTH }}
+      >
+      <div
+        className="flex-1 min-w-0 flex flex-col justify-center px-1.5 group cursor-pointer"
         onClick={handleLabelClick}
         title="點擊：全選本軌道上的片段"
       >
@@ -333,6 +339,8 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
             )}
           </div>
         </div>
+      </div>
+      {(track.type === 'audio' || track.type === 'video') && <TrackMeter trackId={track.id} />}
       </div>
 
       {/* Clip area */}
