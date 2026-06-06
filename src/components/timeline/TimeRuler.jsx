@@ -48,24 +48,28 @@ export default memo(function TimeRuler() {
 
   return (
     <div
-      className="relative select-none cursor-pointer"
+      className="relative select-none cursor-pointer bg-gradient-to-b from-[#1d1d20] to-[#161618]"
       style={{ width: totalWidth, height: 32, minWidth: '100%' }}
       onClick={handleClick}
     >
       {ticks.map(({ t, isMajor }) => {
         const x = timeToPx(t, zoom)
+        // Three-level hierarchy: minute (indigo, tallest) > second/major
+        // (bright, medium) > sub-tick (dim, short). Ticks are bottom-aligned so
+        // labels sit cleanly in the top band.
+        const isMinute = t > 0 && Math.abs(t % 60) < 0.001
+        const tickH = isMinute ? 20 : isMajor ? 13 : 6
+        const tickColor = isMinute ? 'bg-[#6d5efc]' : isMajor ? 'bg-[#6f6f78]' : 'bg-[#393940]'
         return (
-          <div key={t} className="absolute top-0" style={{ left: x }}>
-            {/* Tick line — hangs down from top */}
-            <div
-              className={isMajor ? 'w-px bg-[#666]' : 'w-px bg-[#444]'}
-              style={{ height: isMajor ? 10 : 5 }}
-            />
-            {/* Label — right of major tick */}
+          <div key={t} className="absolute top-0 bottom-0" style={{ left: x }}>
+            {/* Tick — grows up from the baseline */}
+            <div className={`absolute bottom-0 w-px ${tickColor}`} style={{ height: tickH }} />
+            {/* Label in the top band */}
             {isMajor && t > 0 && (
               <span
-                className="absolute text-[10px] text-[#888] font-mono whitespace-nowrap"
-                style={{ left: 4, top: 0 }}
+                className={`absolute top-[3px] left-1 font-mono text-[10px] whitespace-nowrap tabular-nums tracking-tight ${
+                  isMinute ? 'text-[#9b8dff] font-semibold' : 'text-[#aaabb2]'
+                }`}
               >
                 {formatRulerLabel(t)}
               </span>
@@ -73,6 +77,8 @@ export default memo(function TimeRuler() {
           </div>
         )
       })}
+      {/* Baseline */}
+      <div className="absolute left-0 right-0 bottom-0 h-px bg-[#000]/50" />
     </div>
   )
 })
