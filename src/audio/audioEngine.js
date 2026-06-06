@@ -16,36 +16,17 @@ const CLIP_END_EPSILON = 0.001
 
 function makeClipKey(c) {
   // Speed included so a per-clip speed change re-schedules the source node
-  // (without it the dedup at setClips would skip the rate update).
-  // eqKey only captures EQ *structure* (enabled + band count + types), not
-  // band params — so toggling EQ on/off rebuilds the node chain, but tweaking
-  // freq/gain/Q is applied in-place (smooth, no click; see _applyEqParams).
-  // trackId included so moving a clip to another track re-routes it to the
-  // correct per-track meter bus.
-  return `${c.trackId ?? ''}|${c.source}|${c.timelineStart}|${c.trimStart}|${c.trimEnd}|${c.speed ?? 1}|${c.fadeIn || 0}|${c.fadeOut || 0}|${eqKey(c.eq)}`
+  // (without it the dedup at setClips would skip the rate update). trackId
+  // included so moving a clip to another track re-routes it to that track's
+  // bus. Effects (EQ/comp/limiter) are NOT in the key — they live on the track
+  // bus (see setTrackFx), so changing a track's chain never restarts clips.
+  return `${c.trackId ?? ''}|${c.source}|${c.timelineStart}|${c.trimStart}|${c.trimEnd}|${c.speed ?? 1}|${c.fadeIn || 0}|${c.fadeOut || 0}`
 }
 
-// Structural EQ signature for clip-key dedup. Params (freq/gain/Q) deliberately
-// excluded so dragging a band updates filters in place instead of restarting.
-function eqKey(eq) {
-  return eq && eq.bands && eq.bands.length
-    ? `eq${eq.bands.length}:${eq.bands.map(b => b.type).join(',')}`
-    : 'eq0'
-}
-
-// Normalize a track-level EQ descriptor to {enabled:true, bands:[…]} or null.
-// null = no EQ chain (bypass). Disabled or empty EQ collapses to null so the
-// node graph stays source→gain→master.
-function normalizeEq(eq) {
-  if (!eq || !eq.enabled || !Array.isArray(eq.bands) || eq.bands.length === 0) return null
-  const bands = eq.bands.map(b => ({
-    type: (b.type === 'lowshelf' || b.type === 'highshelf') ? b.type : 'peaking',
-    freq: Math.max(20, Math.min(20000, Number(b.freq) || 1000)),
-    gain: Math.max(-24, Math.min(24, Number(b.gain) || 0)),
-    q: Math.max(0.1, Math.min(20, Number(b.q) || 1)),
-  }))
-  return { enabled: true, bands }
-}
+// Numeric coercion with fallback + clamp helpers for plugin params.
+const num = (v, d) => (Number.isFinite(+v) ? +v : d)
+const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+const dbToLin = (db) => Math.pow(10, db / 20)
 
 // Gain at a given source-time position within a clip, given target volume,
 // clip source duration, and effective fade-in/out durations.
@@ -77,6 +58,11 @@ class AudioEngine {
     // its tail into its track's bus.gain (gain → analyser → masterGain), so the
     // analyser reads that track's post-EQ/post-volume mix for the track meter.
     this.trackBuses = new Map()
+
+    // Track effect chains: trackId → TrackPlugin[]. Set by setTrackFx(); each
+    // bus builds its node chain from this. Kept separate from clip descriptors
+    // because effects act on the whole-track mix, not per clip.
+    this._trackPlugins = new Map()
 
     // Decoded AudioBuffer cache: source string → Promise<AudioBuffer>
     this.decodeCache = new Map()
@@ -156,21 +142,141 @@ class AudioEngine {
     return this._readPeak(this.analyser, this._peakBuf)
   }
 
-  // Lazily build a per-track meter bus (gain → analyser → masterGain). Returns
-  // null when there's no track id / no context. Idempotent.
+  // Per-track bus = input → [plugin nodes] → analyser → masterGain. Clips connect
+  // to bus.input; the plugin chain (EQ/comp/limiter) is built by _applyBusPlugins
+  // from the track's effect chain. The analyser taps the POST-effect signal, so
+  // the track meter shows what's actually heading into the master mix.
   _ensureTrackBus(trackId) {
     if (!trackId || !this.ctx) return null
     let bus = this.trackBuses.get(trackId)
     if (!bus) {
-      const gain = this.ctx.createGain()
+      const input = this.ctx.createGain()
       const analyser = this.ctx.createAnalyser()
       analyser.fftSize = 1024
-      gain.connect(analyser)
+      input.connect(analyser)
       analyser.connect(this.masterGain)
-      bus = { gain, analyser, buf: new Float32Array(analyser.fftSize) }
+      bus = { input, analyser, buf: new Float32Array(analyser.fftSize), pluginNodes: [], pluginKey: '' }
       this.trackBuses.set(trackId, bus)
+      const plugins = this._trackPlugins.get(trackId)
+      if (plugins && plugins.length) this._applyBusPlugins(bus, plugins)
     }
     return bus
+  }
+
+  // Replace per-track effect chains and (re)build each live bus. Called by
+  // PreviewPanel whenever track.plugins change. `map`: trackId → TrackPlugin[].
+  setTrackFx(map) {
+    this._ensureContext()
+    this._trackPlugins = map instanceof Map ? map : new Map(Object.entries(map || {}))
+    for (const [tid, bus] of this.trackBuses) {
+      this._applyBusPlugins(bus, this._trackPlugins.get(tid) || [])
+    }
+  }
+
+  // Build/update a bus's plugin node chain. Same structure (enabled plugin types
+  // + EQ band count) → update params in place (smooth, no clicks); otherwise
+  // tear down and rebuild the chain.
+  _applyBusPlugins(bus, plugins) {
+    const enabled = (plugins || []).filter(p => p && p.enabled)
+    const key = enabled.map(p => (p.type === 'eq' ? `eq:${p.params?.bands?.length || 0}` : p.type)).join('|')
+    if (key === bus.pluginKey) {
+      this._updateBusParams(bus, enabled)
+    } else {
+      this._rebuildBusChain(bus, enabled)
+      bus.pluginKey = key
+    }
+  }
+
+  _rebuildBusChain(bus, enabled) {
+    try { bus.input.disconnect() } catch {}
+    for (const pn of bus.pluginNodes) for (const n of pn.nodes) { try { n.disconnect() } catch {} }
+    bus.pluginNodes = []
+    let tail = bus.input
+    for (const p of enabled) {
+      const made = this._makePluginNodes(p)
+      if (!made) continue
+      tail.connect(made.entry)
+      tail = made.exit
+      bus.pluginNodes.push({ type: p.type, refs: made.refs, nodes: made.nodes })
+    }
+    tail.connect(bus.analyser)
+  }
+
+  // Create Web Audio nodes for one plugin → { nodes, entry, exit, refs }. refs
+  // lets _updateBusParams tweak params in place. Internal wiring (EQ band chain,
+  // comp→makeup) is done here.
+  _makePluginNodes(p) {
+    const ctx = this.ctx
+    if (p.type === 'eq') {
+      const bands = p.params?.bands || []
+      const nodes = bands.map(b => {
+        const f = ctx.createBiquadFilter()
+        f.type = (b.type === 'lowshelf' || b.type === 'highshelf') ? b.type : 'peaking'
+        f.frequency.value = clampNum(num(b.freq, 1000), 20, 20000)
+        f.gain.value = clampNum(num(b.gain, 0), -24, 24)
+        f.Q.value = clampNum(num(b.q, 1), 0.1, 20)
+        return f
+      })
+      if (nodes.length === 0) { const g = ctx.createGain(); return { nodes: [g], entry: g, exit: g, refs: [] } }
+      for (let i = 0; i < nodes.length - 1; i++) nodes[i].connect(nodes[i + 1])
+      return { nodes, entry: nodes[0], exit: nodes[nodes.length - 1], refs: nodes }
+    }
+    if (p.type === 'compressor') {
+      const pr = p.params || {}
+      const c = ctx.createDynamicsCompressor()
+      c.threshold.value = clampNum(num(pr.threshold, -24), -100, 0)
+      c.ratio.value = clampNum(num(pr.ratio, 3), 1, 20)
+      c.attack.value = clampNum(num(pr.attack, 10), 0, 1000) / 1000
+      c.release.value = clampNum(num(pr.release, 100), 0, 2000) / 1000
+      c.knee.value = clampNum(num(pr.knee, 6), 0, 40)
+      const m = ctx.createGain()
+      m.gain.value = dbToLin(clampNum(num(pr.makeup, 0), -12, 24))
+      c.connect(m)
+      return { nodes: [c, m], entry: c, exit: m, refs: { comp: c, makeup: m } }
+    }
+    if (p.type === 'limiter') {
+      const pr = p.params || {}
+      const l = ctx.createDynamicsCompressor()
+      l.threshold.value = clampNum(num(pr.threshold, -1), -60, 0)
+      l.knee.value = 0
+      l.ratio.value = 20
+      l.attack.value = 0.003
+      l.release.value = clampNum(num(pr.release, 50), 1, 1000) / 1000
+      return { nodes: [l], entry: l, exit: l, refs: { lim: l } }
+    }
+    const g = ctx.createGain()
+    return { nodes: [g], entry: g, exit: g, refs: {} }
+  }
+
+  _updateBusParams(bus, enabled) {
+    const now = this.ctx.currentTime, tc = 0.01
+    for (let i = 0; i < bus.pluginNodes.length && i < enabled.length; i++) {
+      const pn = bus.pluginNodes[i], p = enabled[i]
+      if (pn.type !== p.type) continue
+      try {
+        if (p.type === 'eq') {
+          const bands = p.params?.bands || []
+          pn.refs.forEach((f, j) => {
+            const b = bands[j]; if (!b) return
+            f.frequency.setTargetAtTime(clampNum(num(b.freq, 1000), 20, 20000), now, tc)
+            f.gain.setTargetAtTime(clampNum(num(b.gain, 0), -24, 24), now, tc)
+            f.Q.setTargetAtTime(clampNum(num(b.q, 1), 0.1, 20), now, tc)
+          })
+        } else if (p.type === 'compressor') {
+          const pr = p.params || {}
+          pn.refs.comp.threshold.setTargetAtTime(clampNum(num(pr.threshold, -24), -100, 0), now, tc)
+          pn.refs.comp.ratio.setTargetAtTime(clampNum(num(pr.ratio, 3), 1, 20), now, tc)
+          pn.refs.comp.attack.setTargetAtTime(clampNum(num(pr.attack, 10), 0, 1000) / 1000, now, tc)
+          pn.refs.comp.release.setTargetAtTime(clampNum(num(pr.release, 100), 0, 2000) / 1000, now, tc)
+          pn.refs.comp.knee.setTargetAtTime(clampNum(num(pr.knee, 6), 0, 40), now, tc)
+          pn.refs.makeup.gain.setTargetAtTime(dbToLin(clampNum(num(pr.makeup, 0), -12, 24)), now, tc)
+        } else if (p.type === 'limiter') {
+          const pr = p.params || {}
+          pn.refs.lim.threshold.setTargetAtTime(clampNum(num(pr.threshold, -1), -60, 0), now, tc)
+          pn.refs.lim.release.setTargetAtTime(clampNum(num(pr.release, 50), 1, 1000) / 1000, now, tc)
+        }
+      } catch {}
+    }
   }
 
   // Read a single track's output peak (post-EQ, post-track-volume, pre-master).
@@ -249,9 +355,6 @@ class AudioEngine {
         muted: !!c.muted,
         fadeIn: Math.max(0, Number(c.fadeIn) || 0),
         fadeOut: Math.max(0, Number(c.fadeOut) || 0),
-        // Track-level parametric EQ folded onto this clip by PreviewPanel's
-        // engineClipDescriptors (mirrors how t.volume is folded in).
-        eq: normalizeEq(c.eq),
       }))
       .filter(c => c.trimEnd > c.trimStart)
 
@@ -261,7 +364,8 @@ class AudioEngine {
     for (const tid of liveTrackIds) this._ensureTrackBus(tid)
     for (const [tid, bus] of this.trackBuses) {
       if (!liveTrackIds.has(tid)) {
-        try { bus.gain.disconnect() } catch {}
+        try { bus.input.disconnect() } catch {}
+        for (const pn of bus.pluginNodes) for (const n of pn.nodes) { try { n.disconnect() } catch {} }
         try { bus.analyser.disconnect() } catch {}
         this.trackBuses.delete(tid)
       }
@@ -287,7 +391,6 @@ class AudioEngine {
         this._applyGainEnvelope(
           node.gain, c, nowCtx, curClipPos, remaining, effRate, true
         )
-        this._applyEqParams(node, c, nowCtx)
       }
       return
     }
@@ -422,29 +525,12 @@ class AudioEngine {
         source.playbackRate.value = effectiveRate
 
         const gain = this.ctx.createGain()
-        // Audio path: source → gain → [EQ biquad chain] → masterGain.
-        // When the clip's track has an enabled EQ, insert one BiquadFilterNode
-        // per band between gain and master. Band params are set here and can be
-        // smoothly updated in place via _applyEqParams (no node rebuild).
-        const eqNodes = []
-        let tail = gain
-        if (clip.eq && clip.eq.bands) {
-          for (const b of clip.eq.bands) {
-            const f = this.ctx.createBiquadFilter()
-            f.type = b.type
-            f.frequency.value = b.freq
-            f.gain.value = b.gain
-            f.Q.value = b.q
-            tail.connect(f)
-            tail = f
-            eqNodes.push(f)
-          }
-        }
         source.connect(gain)
-        // Route the clip's tail into its track's meter bus (gain → analyser →
-        // master). Falls back to master directly if the clip has no track id.
+        // Route the clip into its track's bus input. The bus runs the per-track
+        // effect chain (EQ/comp/limiter) → analyser → master. Effects are
+        // per-track, not per-clip. Falls back to master when there's no track id.
         const bus = this._ensureTrackBus(clip.trackId)
-        tail.connect(bus ? bus.gain : this.masterGain)
+        gain.connect(bus ? bus.input : this.masterGain)
 
         // Clamp offset to buffer length (avoids "offset > duration" throws
         // when the trim extends past the actual decoded length).
@@ -490,13 +576,11 @@ class AudioEngine {
           }
           try { source.disconnect() } catch {}
           try { gain.disconnect() } catch {}
-          for (const f of eqNodes) { try { f.disconnect() } catch {} }
         }
 
         const node = {
           source,
           gain,
-          eqNodes,
           clip,
           startedCtx: effectiveWhen,
           startClipPos,
@@ -572,35 +656,12 @@ class AudioEngine {
     }
   }
 
-  // Update an active node's BiquadFilter params in place from the clip's EQ.
-  // Called from setClips's same-key branch so dragging a band ramps smoothly
-  // (setTargetAtTime ~10ms) instead of restarting the source node (which would
-  // click). The node graph structure is unchanged — band count + types are in
-  // the clip key, so a count/type change would already have rebuilt the node.
-  _applyEqParams(node, clip, nowCtx) {
-    const eqNodes = node.eqNodes
-    if (!eqNodes || !eqNodes.length) return
-    const bands = clip.eq?.bands
-    if (!bands) return
-    const tc = 0.01
-    for (let i = 0; i < eqNodes.length && i < bands.length; i++) {
-      const f = eqNodes[i]
-      const b = bands[i]
-      try {
-        f.frequency.setTargetAtTime(b.freq, nowCtx, tc)
-        f.gain.setTargetAtTime(b.gain, nowCtx, tc)
-        f.Q.setTargetAtTime(b.q, nowCtx, tc)
-      } catch {}
-    }
-  }
-
   _stopAll() {
-    for (const { source, gain, eqNodes } of this.activeSources.values()) {
+    for (const { source, gain } of this.activeSources.values()) {
       try { source.onended = null } catch {}
       try { source.stop() } catch {}
       try { source.disconnect() } catch {}
       try { gain.disconnect() } catch {}
-      if (eqNodes) for (const f of eqNodes) { try { f.disconnect() } catch {} }
     }
     this.activeSources.clear()
   }
@@ -616,6 +677,7 @@ class AudioEngine {
     this.limiter = null
     this._peakBuf = null
     this.trackBuses.clear()
+    this._trackPlugins.clear()
     this.decodeCache.clear()
     this.clips = []
     this.clipsKey = ''

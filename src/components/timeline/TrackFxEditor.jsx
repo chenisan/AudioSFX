@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import { useProjectStore } from '../../stores/projectStore'
-import { getPlugins, makeEqPlugin, PLUGIN_LABELS } from '../../utils/trackPlugins'
+import { getPlugins, makePlugin, PLUGIN_LABELS } from '../../utils/trackPlugins'
 import TrackEqPanel from './TrackEqPanel'
+import TrackDynamicsPanel from './TrackDynamicsPanel'
 
 // Track effect-chain editor (rendered inline in the left column "效果" tab).
 // Owns the track.plugins array and ALL persistence; child param panels
@@ -49,7 +50,7 @@ export default function TrackFxEditor({ track }) {
     commit(next)
   }
   const add = (type) => {
-    const plugin = type === 'eq' ? makeEqPlugin() : null
+    const plugin = makePlugin(type)
     if (!plugin) return
     commit([...plugins, plugin])
     setExpandedId(plugin.id)
@@ -90,12 +91,20 @@ export default function TrackFxEditor({ track }) {
             </div>
 
             {/* Expanded params */}
-            {expandedId === p.id && p.type === 'eq' && (
+            {expandedId === p.id && (
               <div className="px-2 pb-2 border-t border-[#3a3a3a]">
-                <TrackEqPanel
-                  bands={p.params?.bands ?? []}
-                  onChange={(bands, persist) => setParams(p.id, { ...p.params, bands }, persist)}
-                />
+                {p.type === 'eq' ? (
+                  <TrackEqPanel
+                    bands={p.params?.bands ?? []}
+                    onChange={(bands, persist) => setParams(p.id, { ...p.params, bands }, persist)}
+                  />
+                ) : (
+                  <TrackDynamicsPanel
+                    type={p.type}
+                    params={p.params ?? {}}
+                    onChange={(params, persist) => setParams(p.id, params, persist)}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -114,7 +123,10 @@ export default function TrackFxEditor({ track }) {
           <div className="absolute left-0 top-full mt-1 w-full bg-[#2a2a2a] border border-[#444] rounded shadow-lg z-50 py-1">
             <button onClick={() => add('eq')}
               className="w-full text-left text-[11px] px-2 py-1 text-[#ccc] hover:bg-[#3a3a3a]">EQ（5-band）</button>
-            <div className="px-2 py-1 text-[10px] text-[#555] select-none">壓縮器 · 限幅器（Step 2）</div>
+            <button onClick={() => add('compressor')}
+              className="w-full text-left text-[11px] px-2 py-1 text-[#ccc] hover:bg-[#3a3a3a]">壓縮器</button>
+            <button onClick={() => add('limiter')}
+              className="w-full text-left text-[11px] px-2 py-1 text-[#ccc] hover:bg-[#3a3a3a]">限幅器</button>
           </div>
         )}
       </div>

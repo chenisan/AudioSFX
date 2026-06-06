@@ -53,6 +53,32 @@ export function makeEqPlugin() {
   }
 }
 
+export function makeCompressorPlugin() {
+  return {
+    id: newPluginId('compressor'),
+    type: 'compressor',
+    enabled: true,
+    params: { threshold: -24, ratio: 3, attack: 10, release: 100, knee: 6, makeup: 0 },
+  }
+}
+
+export function makeLimiterPlugin() {
+  return {
+    id: newPluginId('limiter'),
+    type: 'limiter',
+    enabled: true,
+    params: { threshold: -1, release: 50 },
+  }
+}
+
+// type → factory, for the "add effect" menu.
+export function makePlugin(type) {
+  if (type === 'eq') return makeEqPlugin()
+  if (type === 'compressor') return makeCompressorPlugin()
+  if (type === 'limiter') return makeLimiterPlugin()
+  return null
+}
+
 export const PLUGIN_LABELS = {
   eq: 'EQ',
   compressor: '壓縮器',

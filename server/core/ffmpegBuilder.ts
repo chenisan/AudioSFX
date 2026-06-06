@@ -14,6 +14,7 @@ import type { Keyframe } from './types'
 
 interface AudioClipRef {
   inputIdx: number
+  trackId: string  // owning track — clips are grouped by this so per-track effect chains apply to the whole-track mix
   trimStart: number
   trimEnd: number
   timelineStart: number
@@ -22,7 +23,6 @@ interface AudioClipRef {
   fadeIn: number   // seconds, 0 = none
   fadeOut: number  // seconds, 0 = none
   volumeKF?: Keyframe[]
-  eq?: TrackEq     // track-level parametric EQ folded onto this clip
 }
 
 /** Build ffmpeg EQ filter strings from a track-level TrackEq. Mirrors the
@@ -49,19 +49,53 @@ function buildEqFilters(eq: TrackEq | undefined): string[] {
   return out
 }
 
-/** Extract the enabled EQ from a track's plugin insert chain → TrackEq (or
- * undefined when there's no enabled eq plugin). Mirrors the preview side
- * (PreviewPanel engineClipDescriptors). Falls back to the legacy track.eq field
- * for any data that hasn't hit the load-time migration yet. EQ is linear, so
- * applying it per-clip here is equivalent to applying it to the track mix. */
-function eqFromTrack(track: any): TrackEq | undefined {
-  const plugins = track?.plugins
-  if (Array.isArray(plugins)) {
-    const p = plugins.find((pl: any) => pl?.type === 'eq' && pl?.enabled)
-    if (p?.params?.bands) return { enabled: true, bands: p.params.bands }
-    return undefined
+function clampRange(v: number, lo: number, hi: number, dflt: number): number {
+  if (!Number.isFinite(v)) return dflt
+  return Math.max(lo, Math.min(hi, v))
+}
+
+/** acompressor filter from compressor plugin params. The preview side uses Web
+ * Audio DynamicsCompressor (dB threshold/knee, dB makeup-gain node); ffmpeg
+ * acompressor takes a LINEAR threshold, a 1–64 makeup multiplier and a 1–8 knee
+ * curve. We map dB→linear for threshold/makeup and leave knee at the ffmpeg
+ * default — the two compressor algorithms differ anyway, so preview is an
+ * approximation of the export, not a sample-exact match. */
+function buildCompressorFilter(pr: any): string {
+  const thrDb = Number(pr?.threshold)
+  const thr = clampRange(Number.isFinite(thrDb) ? Math.pow(10, thrDb / 20) : 0.0625, 0.001, 1, 0.0625)
+  const ratio = clampRange(Number(pr?.ratio), 1, 20, 3)
+  const attack = clampRange(Number(pr?.attack), 0.01, 2000, 10)
+  const release = clampRange(Number(pr?.release), 0.01, 9000, 100)
+  const makeupDb = Number(pr?.makeup)
+  const makeup = clampRange(Number.isFinite(makeupDb) ? Math.pow(10, makeupDb / 20) : 1, 1, 64, 1)
+  return `acompressor=threshold=${thr.toFixed(5)}:ratio=${ratio}:attack=${attack}:release=${release}:makeup=${makeup.toFixed(3)}`
+}
+
+/** alimiter filter from limiter plugin params. Ceiling dB → linear limit;
+ * level=disabled keeps ffmpeg from auto-normalising the output gain. */
+function buildLimiterFilter(pr: any): string {
+  const ceilDb = Number(pr?.threshold)
+  const limit = clampRange(Number.isFinite(ceilDb) ? Math.pow(10, ceilDb / 20) : 0.89, 0.0625, 1, 0.89)
+  const release = clampRange(Number(pr?.release), 1, 9000, 50)
+  return `alimiter=limit=${limit.toFixed(5)}:attack=5:release=${release}:level=disabled`
+}
+
+/** Build the ordered ffmpeg filter strings for a track's plugin insert chain.
+ * MIRROR: src/audio/audioEngine.js `_makePluginNodes` is the preview-side twin
+ * (Web Audio biquad / DynamicsCompressor). Keep the two in sync. */
+function buildPluginFilters(plugins: any[]): string[] {
+  const out: string[] = []
+  for (const p of plugins || []) {
+    if (!p?.enabled) continue
+    if (p.type === 'eq') {
+      out.push(...buildEqFilters({ enabled: true, bands: p.params?.bands } as TrackEq))
+    } else if (p.type === 'compressor') {
+      out.push(buildCompressorFilter(p.params))
+    } else if (p.type === 'limiter') {
+      out.push(buildLimiterFilter(p.params))
+    }
   }
-  return track?.eq as TrackEq | undefined
+  return out
 }
 
 /** Build atempo filter chain. atempo's per-instance range is [0.5, 100],
@@ -403,14 +437,19 @@ export async function buildFfmpegPlan(
   // audioRefs, mixed with amix. Preview (audioEngine.js) follows the same
   // envelope shape so preview and render stay consistent.
   const audioRefs: AudioClipRef[] = []
+  // Per-track effect chains (trackId → TrackPlugin[]), applied to the whole-track
+  // mix in the amix section below. Registered alongside the clip refs.
+  const trackPluginsById = new Map<string, any[]>()
+  const registerTrackPlugins = (track: any) => {
+    if (track?.id) trackPluginsById.set(track.id, Array.isArray(track.plugins) ? track.plugins : [])
+  }
 
-  // trackVolume / trackEq fold the owning video track's track-level audio
-  // settings onto each clip (mirrors engineClipDescriptors on the preview
-  // side, which multiplies t.volume into every clip). Previously video tracks
-  // dropped track.volume at export — now both video and audio tracks honour it.
+  // trackVolume folds the owning video track's track-level gain onto each clip
+  // (mirrors engineClipDescriptors on the preview side). trackId groups clips so
+  // the track's effect chain applies to the whole-track mix at amix time.
   const pushVideoClipAudio = (
     seg: VideoSegment, inputIdx: number, trackMuted: boolean,
-    trackVolume: number, trackEq: TrackEq | undefined,
+    trackVolume: number, trackId: string,
   ) => {
     if (trackMuted || seg.muted) return
     const absPath = resolveSource(seg.source, assetDir)
@@ -425,6 +464,7 @@ export async function buildFfmpegPlan(
     const trimEnd = seg.trimEnd !== undefined ? seg.trimEnd : trimStart + clipDur * speed
     audioRefs.push({
       inputIdx,
+      trackId,
       trimStart,
       trimEnd,
       timelineStart: seg.start,
@@ -432,26 +472,29 @@ export async function buildFfmpegPlan(
       volume: (seg.volume ?? 1) * trackVolume,
       fadeIn: Math.max(0, seg.fadeIn?.duration ?? 0),
       fadeOut: Math.max(0, seg.fadeOut?.duration ?? 0),
-      eq: trackEq,
     })
   }
 
   const mainTrackMuted = !!mainVideoTrack?.muted
   const mainTrackVolume = (mainVideoTrack as any)?.volume ?? 1
-  const mainTrackEq = eqFromTrack(mainVideoTrack)
-  videoSegments.forEach((seg, i) => pushVideoClipAudio(seg, mainVideoInputIdx[i], mainTrackMuted, mainTrackVolume, mainTrackEq))
+  const mainTrackId = (mainVideoTrack as any)?.id ?? '_main'
+  registerTrackPlugins(mainVideoTrack)
+  videoSegments.forEach((seg, i) => pushVideoClipAudio(seg, mainVideoInputIdx[i], mainTrackMuted, mainTrackVolume, mainTrackId))
 
   overlayTracks.forEach((trackSegs, ti) => {
     const ovlTrack = overlayVideoTracks[ti]
     const trackMuted = !!ovlTrack?.muted
     const trackVolume = (ovlTrack as any)?.volume ?? 1
-    const trackEq = eqFromTrack(ovlTrack)
+    const trackId = (ovlTrack as any)?.id ?? `_ovl${ti}`
+    registerTrackPlugins(ovlTrack)
     trackSegs.forEach((seg, ci) => {
-      pushVideoClipAudio(seg, overlayInputIdxByTrack[ti][ci], trackMuted, trackVolume, trackEq)
+      pushVideoClipAudio(seg, overlayInputIdxByTrack[ti][ci], trackMuted, trackVolume, trackId)
     })
   })
 
   audioTracks.forEach((t, ti) => {
+    registerTrackPlugins(t)
+    const trackId = (t as any).id ?? `_aud${ti}`
     const clips = (t.clips ?? []).filter(isAudioSegment)
     clips.forEach((c, ci) => {
       if (c.muted) return
@@ -462,6 +505,7 @@ export async function buildFfmpegPlan(
       const trimEnd = c.trimEnd !== undefined ? c.trimEnd : trimStart + clipDur * speed
       audioRefs.push({
         inputIdx: audioTrackInputIdx[ti][ci],
+        trackId,
         trimStart,
         trimEnd,
         timelineStart: c.start,
@@ -470,60 +514,92 @@ export async function buildFfmpegPlan(
         fadeIn: Math.max(0, c.fadeIn?.duration ?? 0),
         fadeOut: Math.max(0, c.fadeOut?.duration ?? 0),
         volumeKF: c.volumeKF,
-        eq: eqFromTrack(t),
       })
     })
   })
 
   let audioOutputLabel: string | null = null
   if (audioRefs.length > 0) {
-    const clipLabels: string[] = []
-    audioRefs.forEach((ref, i) => {
-      // sourceRange = how much of the source we're going to play
-      // (atrim window). After atempo, output duration = sourceRange / speed,
-      // which matches the timeline duration the user sees. Fades are
-      // expressed in TIMELINE seconds (post-atempo), not source seconds.
-      const sourceRange = Math.max(0, ref.trimEnd - ref.trimStart)
-      if (sourceRange <= 0) return
-      const clipDur = sourceRange / ref.speed   // post-atempo output duration
-      const maxFade = clipDur / 2
-      const fIn = Math.min(ref.fadeIn, maxFade)
-      const fOut = Math.min(ref.fadeOut, maxFade)
+    // Two-level mix: per-track (clips → amix → effect chain) then a final amix
+    // across tracks. Effects must sit on the whole-track mix because comp/limiter
+    // are non-linear (per-clip would compress each clip independently). EQ is
+    // linear so it'd be equivalent per-clip, but it shares the chain so plugin
+    // ORDER is honoured. amix normalize=0 means both levels are plain sums, so
+    // two-level mixing is gain-equivalent to the old single amix.
+    const byTrack = new Map<string, AudioClipRef[]>()
+    for (const ref of audioRefs) {
+      const tid = ref.trackId || '_none'
+      if (!byTrack.has(tid)) byTrack.set(tid, [])
+      byTrack.get(tid)!.push(ref)
+    }
 
-      const chain: string[] = []
-      chain.push(`atrim=start=${ref.trimStart}:end=${ref.trimEnd}`)
-      chain.push('asetpts=PTS-STARTPTS')
-      // atempo: applied AFTER atrim so the source range is right; applied
-      // BEFORE volume/fade so the fade durations are timeline-aligned.
-      chain.push(...buildAtempoChain(ref.speed))
-      if (ref.volumeKF && ref.volumeKF.length > 0) {
-        const volExpr = buildKFExpr(ref.volumeKF, 't')
-        chain.push(`volume=volume='${volExpr}':eval=frame`)
-      } else if (ref.volume !== 1) {
-        chain.push(`volume=${ref.volume}`)
+    const trackLabels: string[] = []
+    let ci = 0   // global clip-label counter
+    let ti = 0   // track-label counter
+    for (const [tid, refs] of byTrack) {
+      const clipLabels: string[] = []
+      for (const ref of refs) {
+        // sourceRange = how much of the source we play (atrim window). After
+        // atempo, output duration = sourceRange / speed = the timeline duration.
+        // Fades are in TIMELINE seconds (post-atempo).
+        const sourceRange = Math.max(0, ref.trimEnd - ref.trimStart)
+        if (sourceRange <= 0) continue
+        const clipDur = sourceRange / ref.speed
+        const maxFade = clipDur / 2
+        const fIn = Math.min(ref.fadeIn, maxFade)
+        const fOut = Math.min(ref.fadeOut, maxFade)
+
+        const chain: string[] = []
+        chain.push(`atrim=start=${ref.trimStart}:end=${ref.trimEnd}`)
+        chain.push('asetpts=PTS-STARTPTS')
+        // atempo AFTER atrim (source range right), BEFORE volume/fade (timeline-aligned).
+        chain.push(...buildAtempoChain(ref.speed))
+        if (ref.volumeKF && ref.volumeKF.length > 0) {
+          const volExpr = buildKFExpr(ref.volumeKF, 't')
+          chain.push(`volume=volume='${volExpr}':eval=frame`)
+        } else if (ref.volume !== 1) {
+          chain.push(`volume=${ref.volume}`)
+        }
+        if (fIn > 0) chain.push(`afade=t=in:st=0:d=${fIn}`)
+        if (fOut > 0) chain.push(`afade=t=out:st=${clipDur - fOut}:d=${fOut}`)
+        if (ref.timelineStart > 0) {
+          const delayMs = Math.round(ref.timelineStart * 1000)
+          chain.push(`adelay=${delayMs}:all=1`)
+        }
+
+        const label = `aclip${ci++}`
+        filterParts.push(`[${ref.inputIdx}:a]${chain.join(',')}[${label}]`)
+        clipLabels.push(`[${label}]`)
       }
-      // Track-level parametric EQ — applied after volume so band gains are
-      // relative to the post-gain signal, before fades so the envelope still
-      // shapes the EQ'd output. Mirrors audioEngine.js (gain → biquad chain).
-      chain.push(...buildEqFilters(ref.eq))
-      if (fIn > 0) chain.push(`afade=t=in:st=0:d=${fIn}`)
-      if (fOut > 0) chain.push(`afade=t=out:st=${clipDur - fOut}:d=${fOut}`)
-      if (ref.timelineStart > 0) {
-        const delayMs = Math.round(ref.timelineStart * 1000)
-        chain.push(`adelay=${delayMs}:all=1`)
+      if (clipLabels.length === 0) continue
+
+      // Mix this track's clips into one stream.
+      let trackMix: string
+      if (clipLabels.length === 1) {
+        trackMix = clipLabels[0].slice(1, -1)
+      } else {
+        trackMix = `atrkmix${ti}`
+        filterParts.push(`${clipLabels.join('')}amix=inputs=${clipLabels.length}:normalize=0:dropout_transition=0[${trackMix}]`)
       }
 
-      const label = `aclip${i}`
-      filterParts.push(`[${ref.inputIdx}:a]${chain.join(',')}[${label}]`)
-      clipLabels.push(`[${label}]`)
-    })
+      // Apply this track's effect chain to the whole-track mix.
+      const pluginFilters = buildPluginFilters(trackPluginsById.get(tid) || [])
+      let trackOut = trackMix
+      if (pluginFilters.length > 0) {
+        const fxLabel = `atrkfx${ti}`
+        filterParts.push(`[${trackMix}]${pluginFilters.join(',')}[${fxLabel}]`)
+        trackOut = fxLabel
+      }
+      trackLabels.push(`[${trackOut}]`)
+      ti++
+    }
 
-    if (clipLabels.length === 1) {
-      audioOutputLabel = clipLabels[0].slice(1, -1)
-    } else if (clipLabels.length > 1) {
+    if (trackLabels.length === 1) {
+      audioOutputLabel = trackLabels[0].slice(1, -1)
+    } else if (trackLabels.length > 1) {
       const mixLabel = 'afinal'
       filterParts.push(
-        `${clipLabels.join('')}amix=inputs=${clipLabels.length}:normalize=0:dropout_transition=0[${mixLabel}]`
+        `${trackLabels.join('')}amix=inputs=${trackLabels.length}:normalize=0:dropout_transition=0[${mixLabel}]`
       )
       audioOutputLabel = mixLabel
     }

@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { formatTimecode } from '../../utils/timeFormat'
 import { audioEngine } from '../../audio/audioEngine'
 import OutputMeter from './OutputMeter'
-import { eqFromTrack } from '../../utils/trackPlugins'
+import { getPlugins } from '../../utils/trackPlugins'
 import OverlayClip, {
   computeCropStyle,
   getEffectiveOverlay,
@@ -180,10 +180,6 @@ function TimelinePreview({ project, playheadTime, isPlaying, setPlayheadTime, se
           muted: trackMuted || !!c.muted,
           fadeIn: Math.max(0, Number(c.fadeIn?.duration) || 0),
           fadeOut: Math.max(0, Number(c.fadeOut?.duration) || 0),
-          // Track-level parametric EQ from the plugin chain — engine builds a
-          // BiquadFilter chain per clip from this (audioEngine.normalizeEq).
-          // undefined / disabled eq plugin = bypass.
-          eq: eqFromTrack(t),
         })
       }
     }
@@ -192,6 +188,17 @@ function TimelinePreview({ project, playheadTime, isPlaying, setPlayheadTime, se
   // The previous [project] dep rebuilt on every project mutation
   // (rename, aspectRatio change, exportRange handle drag) even though
   // none of those touch audio scheduling.
+  }, [project?.timeline?.tracks])
+
+  // Per-track effect chains → engine. Built from track.plugins; the engine
+  // applies them on each track bus (whole-track mix), not per clip.
+  const trackPluginsMap = useMemo(() => {
+    const m = new Map()
+    for (const t of project?.timeline?.tracks ?? []) {
+      const pl = getPlugins(t)
+      if (pl.length) m.set(t.id, pl)
+    }
+    return m
   }, [project?.timeline?.tracks])
 
   const hasEngineClipsRef = useRef(false)
@@ -206,6 +213,10 @@ function TimelinePreview({ project, playheadTime, isPlaying, setPlayheadTime, se
   useEffect(() => {
     audioEngine.setClips(engineClipDescriptors)
   }, [engineClipDescriptors])
+
+  useEffect(() => {
+    audioEngine.setTrackFx(trackPluginsMap)
+  }, [trackPluginsMap])
 
   // ── Active text segments ──────────────────────────────────────────────────
   // Two-step memo: the sorted text-track list depends only on tracks; the
