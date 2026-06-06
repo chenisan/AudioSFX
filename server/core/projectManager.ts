@@ -660,7 +660,7 @@ export async function applyToAllClips(projectId: string, trackId: string, update
 // wins, silently losing the other updates.
 //
 // Re-entrant by async chain: if a function already running under the lock
-// (e.g. ensureScriptTrack, slideshowService) calls another locked function
+// (e.g. ensureScriptTrack) calls another locked function
 // (addTrack), the inner call sees the lock is already held by the same
 // async chain and runs inline instead of deadlocking. AsyncLocalStorage
 // gives us per-async-chain ownership tracking.
