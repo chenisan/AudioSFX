@@ -2,9 +2,7 @@ import { useState, useRef, memo } from 'react'
 import { useProjectStore } from '../../stores/projectStore'
 import { useAssetDrop } from '../../hooks/useDragDrop'
 import Clip from './Clip'
-import TrackFxPanel from './TrackFxPanel'
 import TrackMeter from './TrackMeter'
-import { getPlugins } from '../../utils/trackPlugins'
 import { timeToPx, pxToTime } from '../../utils/timeFormat'
 
 const TRACK_TYPE_ICONS = { video: '🎬', text: '🔤', audio: '🎵', script: '🎨' }
@@ -220,20 +218,6 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
                         className="w-full h-1 accent-[#6d5efc] cursor-pointer"
                         title="整條音軌的音量（與各片段音量相乘）"
                       />
-                    </div>
-                  )}
-
-                  {/* Track effect chain — any track carrying audio (audio + video) */}
-                  {(track.type === 'audio' || track.type === 'video') && (
-                    <div className="relative">
-                      <button
-                        onClick={() => setSubMenu(subMenu === 'fx' ? null : 'fx')}
-                        className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-[#ccc] hover:bg-[#3a3a3a]"
-                      >
-                        <span>效果{getPlugins(track).some(p => p?.enabled) ? <span className="text-[#6d5efc] ml-1">●</span> : ''}</span>
-                        <span className="text-[#666] text-[10px] ml-2">›</span>
-                      </button>
-                      {subMenu === 'fx' && <TrackFxPanel track={track} />}
                     </div>
                   )}
 

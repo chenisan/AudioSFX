@@ -3,14 +3,14 @@ import { useProjectStore } from '../../stores/projectStore'
 import { getPlugins, makeEqPlugin, PLUGIN_LABELS } from '../../utils/trackPlugins'
 import TrackEqPanel from './TrackEqPanel'
 
-// Track effect-chain editor (flyout in the track ⋯more menu). Owns the
-// track.plugins array and ALL persistence; child param panels (TrackEqPanel,
-// later Compressor/Limiter) are stateless and just emit param changes.
+// Track effect-chain editor (rendered inline in the left column "效果" tab).
+// Owns the track.plugins array and ALL persistence; child param panels
+// (TrackEqPanel, later Compressor/Limiter) are stateless and just emit changes.
 //
 // Structural ops (toggle / add / remove / reorder) persist immediately. Param
 // drags go through setTrackPluginsLive (store only, live preview) + a debounced
 // setTrackPlugins commit — same pattern the per-track EQ used.
-export default function TrackFxPanel({ track }) {
+export default function TrackFxEditor({ track }) {
   const setTrackPlugins = useProjectStore(s => s.setTrackPlugins)
   const setTrackPluginsLive = useProjectStore(s => s.setTrackPluginsLive)
   const [expandedId, setExpandedId] = useState(null)
@@ -57,12 +57,9 @@ export default function TrackFxPanel({ track }) {
   }
 
   return (
-    <div
-      className="absolute left-full top-0 ml-1 bg-[#2a2a2a] border border-[#444] rounded-lg shadow-xl z-50 p-2 w-[320px]"
-      onClick={e => e.stopPropagation()}
-    >
+    <div className="flex flex-col">
       {plugins.length === 0 && (
-        <div className="text-[10px] text-[#666] px-1 py-2 text-center">尚未掛載效果</div>
+        <div className="text-[10px] text-[#666] px-1 py-3 text-center">尚未掛載效果</div>
       )}
 
       <div className="flex flex-col gap-1">

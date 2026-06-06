@@ -7,6 +7,7 @@ import Resizer from './components/layout/Resizer'
 import PreviewPanel from './components/preview/PreviewPanel'
 import AssetPanel from './components/assets/AssetPanel'
 import SfxPanel from './components/audio/SfxPanel'
+import TrackEffectsTab from './components/timeline/TrackEffectsTab'
 import AudioGenIndicator from './components/audio/AudioGenIndicator'
 import Timeline from './components/timeline/Timeline'
 import Toast from './components/common/Toast'
@@ -113,7 +114,7 @@ function ProjectModal({ onClose }) {
 }
 
 // ── Left panel — asset library + SFX generation (tabbed) ───────────────────────
-const LEFT_TABS = [['assets', '素材'], ['sfx', '音效']]
+const LEFT_TABS = [['assets', '素材'], ['sfx', '音效'], ['effects', '效果']]
 
 function LeftPanel() {
   const [tab, setTab] = useState('assets')
@@ -131,7 +132,7 @@ function LeftPanel() {
         ))}
       </div>
       <div className="flex-1 overflow-hidden">
-        {tab === 'assets' ? <AssetPanel /> : <SfxPanel />}
+        {tab === 'assets' ? <AssetPanel /> : tab === 'sfx' ? <SfxPanel /> : <TrackEffectsTab />}
       </div>
     </div>
   )

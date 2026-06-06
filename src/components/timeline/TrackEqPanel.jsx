@@ -7,7 +7,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 const fmtFreq = (f) => (f >= 1000 ? `${(f / 1000).toFixed(f % 1000 === 0 ? 0 : 1)}k` : `${Math.round(f)}`)
 
 // EQ band editor — stateless w.r.t. the store. Receives the eq plugin's `bands`
-// and an `onChange(nextBands, persist)` callback; TrackFxPanel owns the plugins
+// and an `onChange(nextBands, persist)` callback; TrackFxEditor owns the plugins
 // array and the live (store-only) + debounced (server) persist. `persist=false`
 // = live drag update; `persist=true` = commit (reset / final value).
 export default function TrackEqPanel({ bands, onChange }) {
