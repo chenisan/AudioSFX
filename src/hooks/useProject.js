@@ -1,5 +1,4 @@
 import { useProjectStore } from '../stores/projectStore'
-import { syncWorkflowSource } from '../utils/aiScriptPublish'
 
 // Singleton EventSource for project change notifications. The server emits
 // a 'changed' event whenever writeProject() runs (REST PUT, MCP tool, etc.).
@@ -107,60 +106,6 @@ async function handleExternalProjectChange(projectId, remoteUpdatedAt) {
 }
 
 /**
- * After a project loads, walk every video clip with an `aiScriptRef` and ask the
- * server whether its workflow.json has a terminal media that is not yet reflected
- * in `clip.source`. Runs in the background; clips are re-located by `aiScriptRef`
- * before writing so concurrent edits do not corrupt state.
- *
- * Dedup by scriptId — duplicating a clip leaves two timeline clips pointing at
- * the same aiScriptRef. Publishing N times in parallel races over the same
- * media file (two copies land in assets/, meta.json gets the last writer).
- * We publish once per script and then patch every clip referencing it.
- */
-async function syncAiScriptSources(project) {
-  const tracks = project?.timeline?.tracks
-  if (!tracks?.length) return
-
-  // scriptId → oldSource (use the first clip's source as the publish hint;
-  // server uses it to clean up the previous asset)
-  const byScript = new Map()
-  for (const track of tracks) {
-    if (track.type !== 'video') continue
-    for (const clip of track.clips) {
-      if (!clip.aiScriptRef) continue
-      if (!byScript.has(clip.aiScriptRef)) {
-        byScript.set(clip.aiScriptRef, clip.source || undefined)
-      }
-    }
-  }
-  if (byScript.size === 0) return
-
-  await Promise.all(Array.from(byScript.entries()).map(async ([scriptId, oldSource]) => {
-    const filename = await syncWorkflowSource({
-      projectId: project.id,
-      scriptId,
-      oldSource,
-    })
-    if (!filename || filename === oldSource) return
-
-    // Patch every clip that still references this scriptId in the latest store.
-    // Sequential within a script so optimistic merges chain cleanly.
-    const state = useProjectStore.getState()
-    const tl = state.project?.timeline
-    if (!tl || state.project.id !== project.id) return
-    for (const tr of tl.tracks) {
-      if (tr.type !== 'video') continue
-      for (let idx = 0; idx < tr.clips.length; idx++) {
-        const c = tr.clips[idx]
-        if (c.aiScriptRef !== scriptId) continue
-        if (c.source === filename) continue
-        await state.updateClip(tr.id, idx, { source: filename })
-      }
-    }
-  }))
-}
-
-/**
  * One-shot backfill of clip.sourceDuration on project load. Pre-AI-publish
  * code paths (one-click pipeline, batch generators) created clips without
  * sourceDuration; the resize-end clamp then fell back to Infinity, letting
@@ -249,11 +194,7 @@ export function useProject() {
     const p = await res.json()
     setProject(p)
     subscribeProjectEvents(id)
-    // Fire-and-forget: backfill clip.source for AI-script clips whose workflow.json
-    // has produced media but the clip never received a publish-media update
-    // (e.g. previous session crashed before WorkflowEditor was reopened).
-    syncAiScriptSources(p)
-    // Also backfill sourceDuration on legacy clips whose publish path didn't
+    // Backfill sourceDuration on legacy clips whose publish path didn't
     // set it — without this resize-end has no clamp and lets the user drag
     // the right edge forever.
     backfillSourceDurations(p)
