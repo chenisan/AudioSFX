@@ -34,6 +34,14 @@ export function createEditorUISlice(set, get) {
     previewAsset: null,
     autoSnap: false,
     loopExportRange: false,
+    // Master output volume (0–1). UI-only; persisted per-machine to localStorage
+    // (not project.yaml). Synced to audioEngine.setMasterVolume by PreviewPanel.
+    masterVolume: (() => {
+      try {
+        const v = Number(localStorage.getItem('13soul.masterVolume'))
+        return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 1
+      } catch { return 1 }
+    })(),
     // Persistent indicator for long audio generations (MMAudio/Woosh V2A) that
     // have no sub-step progress. null = idle; otherwise { label, startedAt }.
     audioGen: null,
@@ -211,6 +219,16 @@ export function createEditorUISlice(set, get) {
 
     setExportSettings(settings) {
       set(state => ({ exportSettings: { ...state.exportSettings, ...settings } }))
+    },
+
+    // ── Master output ────────────────────────────────
+
+    /** Master output volume (0–1). Accepts a value or updater fn. Persisted to
+     *  localStorage; PreviewPanel syncs it to audioEngine. */
+    setMasterVolume(v) {
+      const next = Math.max(0, Math.min(1, typeof v === 'function' ? v(get().masterVolume) : v))
+      set({ masterVolume: next })
+      try { localStorage.setItem('13soul.masterVolume', String(next)) } catch {}
     },
 
     // ── Derived helpers ──────────────────────────────

@@ -4,7 +4,6 @@ import { useProjectStore, ASPECT_RATIOS } from '../../stores/projectStore'
 import { useShallow } from 'zustand/react/shallow'
 import { formatTimecode } from '../../utils/timeFormat'
 import { audioEngine } from '../../audio/audioEngine'
-import OutputMeter from './OutputMeter'
 import { getPlugins } from '../../utils/trackPlugins'
 import OverlayClip, {
   computeCropStyle,
@@ -963,16 +962,14 @@ export default function PreviewPanel() {
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [loopEnabled, setLoopEnabled] = useState(false)
   const [showSpeedMenu, setShowSpeedMenu] = useState(false)
-  const [masterVolume, setMasterVolume] = useState(() => {
-    const v = Number(localStorage.getItem('13soul.masterVolume'))
-    return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 1
-  })
+  const masterVolume = useProjectStore(s => s.masterVolume)
   const SPEEDS = [0.5, 1, 1.5, 2]
 
-  // Master volume → engine + persist
+  // Master volume (store) → engine. Persistence is handled by the store action.
+  // The master volume / output-meter UI now lives in the left "效果" tab's
+  // Main Out strip (MainOutStrip); this only keeps the engine in sync globally.
   useEffect(() => {
     audioEngine.setMasterVolume(masterVolume)
-    localStorage.setItem('13soul.masterVolume', String(masterVolume))
   }, [masterVolume])
 
   // Pre-warm AudioContext on first user gesture anywhere so the first play()
@@ -1173,31 +1170,8 @@ export default function PreviewPanel() {
           )
         })()}
 
-        {/* Master volume */}
-        <div className="flex items-center gap-1.5 mr-2" title="主音量">
-          <button
-            onClick={() => setMasterVolume(v => v > 0 ? 0 : 1)}
-            className="w-6 h-6 flex items-center justify-center text-[#888] hover:text-white"
-            title={masterVolume > 0 ? '靜音' : '取消靜音'}
-          >
-            {masterVolume <= 0 ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-            ) : masterVolume < 0.5 ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-            )}
-          </button>
-          <input
-            type="range" value={masterVolume} min={0} max={1} step={0.01}
-            onChange={e => setMasterVolume(+e.target.value)}
-            className="w-16 h-1 accent-[#6d5efc] cursor-pointer"
-          />
-        </div>
-
-        {/* Master output peak meter + clip light */}
-        <OutputMeter />
-
+        {/* 播放速度 / 循環 / 比例 — 先隱藏（要恢復把下面的 false 改回 true） */}
+        {false && (<>
         {/* Loop toggle */}
         <button
           onClick={() => setLoopEnabled(!loopEnabled)}
@@ -1265,6 +1239,7 @@ export default function PreviewPanel() {
             </>
           )}
         </div>
+        </>)}
         </div>
       </div>
     </div>
