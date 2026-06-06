@@ -475,6 +475,29 @@ export function createProjectDocSlice(set, get) {
       } : {})
     },
 
+    /** Track-level parametric EQ (preview via Web Audio biquads, export via
+     *  ffmpeg bass/equalizer/treble). PATCHes the server — call once on commit
+     *  (slider release / toggle), NOT per drag tick. `eq` = { enabled, bands }. */
+    setTrackEq(trackId, eq) {
+      return get()._patchTrack(trackId, { eq }, t => ({ ...t, eq }))
+    },
+
+    /** Local-only EQ update for smooth band-slider dragging — updates the store
+     *  (so preview reacts live, in place, no click) WITHOUT hitting the server.
+     *  The panel debounces a single setTrackEq() to persist after the drag. */
+    setTrackEqLive(trackId, eq) {
+      set(state => state.project ? {
+        project: {
+          ...state.project,
+          timeline: {
+            ...state.project.timeline,
+            tracks: state.project.timeline.tracks.map(t => t.id === trackId ? { ...t, eq } : t),
+          },
+        },
+        isDirty: true,
+      } : {})
+    },
+
     // ── Clip actions ─────────────────────────────────
 
     /**

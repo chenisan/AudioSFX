@@ -17,7 +17,32 @@ const CLIP_END_EPSILON = 0.001
 function makeClipKey(c) {
   // Speed included so a per-clip speed change re-schedules the source node
   // (without it the dedup at setClips would skip the rate update).
-  return `${c.source}|${c.timelineStart}|${c.trimStart}|${c.trimEnd}|${c.speed ?? 1}|${c.fadeIn || 0}|${c.fadeOut || 0}`
+  // eqKey only captures EQ *structure* (enabled + band count + types), not
+  // band params — so toggling EQ on/off rebuilds the node chain, but tweaking
+  // freq/gain/Q is applied in-place (smooth, no click; see _applyEqParams).
+  return `${c.source}|${c.timelineStart}|${c.trimStart}|${c.trimEnd}|${c.speed ?? 1}|${c.fadeIn || 0}|${c.fadeOut || 0}|${eqKey(c.eq)}`
+}
+
+// Structural EQ signature for clip-key dedup. Params (freq/gain/Q) deliberately
+// excluded so dragging a band updates filters in place instead of restarting.
+function eqKey(eq) {
+  return eq && eq.bands && eq.bands.length
+    ? `eq${eq.bands.length}:${eq.bands.map(b => b.type).join(',')}`
+    : 'eq0'
+}
+
+// Normalize a track-level EQ descriptor to {enabled:true, bands:[…]} or null.
+// null = no EQ chain (bypass). Disabled or empty EQ collapses to null so the
+// node graph stays source→gain→master.
+function normalizeEq(eq) {
+  if (!eq || !eq.enabled || !Array.isArray(eq.bands) || eq.bands.length === 0) return null
+  const bands = eq.bands.map(b => ({
+    type: (b.type === 'lowshelf' || b.type === 'highshelf') ? b.type : 'peaking',
+    freq: Math.max(20, Math.min(20000, Number(b.freq) || 1000)),
+    gain: Math.max(-24, Math.min(24, Number(b.gain) || 0)),
+    q: Math.max(0.1, Math.min(20, Number(b.q) || 1)),
+  }))
+  return { enabled: true, bands }
 }
 
 // Gain at a given source-time position within a clip, given target volume,
@@ -39,6 +64,12 @@ class AudioEngine {
   constructor() {
     this.ctx = null
     this.masterGain = null
+    // Output monitoring (peak meter) + brickwall limiter. Chain tail is
+    // masterGain → analyser (reads PRE-limiter peak, so the clip light tells you
+    // the raw signal exceeded 0 dBFS) → limiter → destination.
+    this.analyser = null
+    this.limiter = null
+    this._peakBuf = null
 
     // Decoded AudioBuffer cache: source string → Promise<AudioBuffer>
     this.decodeCache = new Map()
@@ -73,7 +104,45 @@ class AudioEngine {
     this.ctx = new Ctor({ latencyHint: 'interactive' })
     this.masterGain = this.ctx.createGain()
     this.masterGain.gain.value = 1
-    this.masterGain.connect(this.ctx.destination)
+
+    // Peak meter taps the signal BEFORE the limiter so the UI can show when the
+    // raw mix clips (≥ 0 dBFS) even though the limiter then tames it.
+    this.analyser = this.ctx.createAnalyser()
+    this.analyser.fftSize = 1024
+    this._peakBuf = new Float32Array(this.analyser.fftSize)
+
+    // Brickwall-ish soft limiter on the master bus. DynamicsCompressor with a
+    // high ratio + hard knee + fast attack catches EQ-boost overs so the
+    // hardware output stops hard-clipping ("爆爆" sound).
+    this.limiter = this.ctx.createDynamicsCompressor()
+    this.limiter.threshold.value = -1.0
+    this.limiter.knee.value = 0
+    this.limiter.ratio.value = 20
+    this.limiter.attack.value = 0.003
+    this.limiter.release.value = 0.1
+
+    this.masterGain.connect(this.analyser)
+    this.analyser.connect(this.limiter)
+    this.limiter.connect(this.ctx.destination)
+  }
+
+  // Read the current output peak (pre-limiter). Returns linear peak, dBFS, and
+  // a clip flag (raw mix reached/exceeded 0 dBFS → the limiter is engaging).
+  // Returns silence when the context isn't up yet. Cheap enough to call per rAF.
+  getOutputPeak() {
+    if (!this.analyser) return { peak: 0, db: -Infinity, clip: false }
+    const buf = this._peakBuf
+    this.analyser.getFloatTimeDomainData(buf)
+    let max = 0
+    for (let i = 0; i < buf.length; i++) {
+      const a = Math.abs(buf[i])
+      if (a > max) max = a
+    }
+    return {
+      peak: max,
+      db: max > 0 ? 20 * Math.log10(max) : -Infinity,
+      clip: max >= 1.0,
+    }
   }
 
   setProjectId(projectId) {
@@ -142,6 +211,9 @@ class AudioEngine {
         muted: !!c.muted,
         fadeIn: Math.max(0, Number(c.fadeIn) || 0),
         fadeOut: Math.max(0, Number(c.fadeOut) || 0),
+        // Track-level parametric EQ folded onto this clip by PreviewPanel's
+        // engineClipDescriptors (mirrors how t.volume is folded in).
+        eq: normalizeEq(c.eq),
       }))
       .filter(c => c.trimEnd > c.trimStart)
 
@@ -165,6 +237,7 @@ class AudioEngine {
         this._applyGainEnvelope(
           node.gain, c, nowCtx, curClipPos, remaining, effRate, true
         )
+        this._applyEqParams(node, c, nowCtx)
       }
       return
     }
@@ -299,7 +372,26 @@ class AudioEngine {
         source.playbackRate.value = effectiveRate
 
         const gain = this.ctx.createGain()
-        source.connect(gain).connect(this.masterGain)
+        // Audio path: source → gain → [EQ biquad chain] → masterGain.
+        // When the clip's track has an enabled EQ, insert one BiquadFilterNode
+        // per band between gain and master. Band params are set here and can be
+        // smoothly updated in place via _applyEqParams (no node rebuild).
+        const eqNodes = []
+        let tail = gain
+        if (clip.eq && clip.eq.bands) {
+          for (const b of clip.eq.bands) {
+            const f = this.ctx.createBiquadFilter()
+            f.type = b.type
+            f.frequency.value = b.freq
+            f.gain.value = b.gain
+            f.Q.value = b.q
+            tail.connect(f)
+            tail = f
+            eqNodes.push(f)
+          }
+        }
+        source.connect(gain)
+        tail.connect(this.masterGain)
 
         // Clamp offset to buffer length (avoids "offset > duration" throws
         // when the trim extends past the actual decoded length).
@@ -345,11 +437,13 @@ class AudioEngine {
           }
           try { source.disconnect() } catch {}
           try { gain.disconnect() } catch {}
+          for (const f of eqNodes) { try { f.disconnect() } catch {} }
         }
 
         const node = {
           source,
           gain,
+          eqNodes,
           clip,
           startedCtx: effectiveWhen,
           startClipPos,
@@ -425,12 +519,35 @@ class AudioEngine {
     }
   }
 
+  // Update an active node's BiquadFilter params in place from the clip's EQ.
+  // Called from setClips's same-key branch so dragging a band ramps smoothly
+  // (setTargetAtTime ~10ms) instead of restarting the source node (which would
+  // click). The node graph structure is unchanged — band count + types are in
+  // the clip key, so a count/type change would already have rebuilt the node.
+  _applyEqParams(node, clip, nowCtx) {
+    const eqNodes = node.eqNodes
+    if (!eqNodes || !eqNodes.length) return
+    const bands = clip.eq?.bands
+    if (!bands) return
+    const tc = 0.01
+    for (let i = 0; i < eqNodes.length && i < bands.length; i++) {
+      const f = eqNodes[i]
+      const b = bands[i]
+      try {
+        f.frequency.setTargetAtTime(b.freq, nowCtx, tc)
+        f.gain.setTargetAtTime(b.gain, nowCtx, tc)
+        f.Q.setTargetAtTime(b.q, nowCtx, tc)
+      } catch {}
+    }
+  }
+
   _stopAll() {
-    for (const { source, gain } of this.activeSources.values()) {
+    for (const { source, gain, eqNodes } of this.activeSources.values()) {
       try { source.onended = null } catch {}
       try { source.stop() } catch {}
       try { source.disconnect() } catch {}
       try { gain.disconnect() } catch {}
+      if (eqNodes) for (const f of eqNodes) { try { f.disconnect() } catch {} }
     }
     this.activeSources.clear()
   }
@@ -442,6 +559,9 @@ class AudioEngine {
     }
     this.ctx = null
     this.masterGain = null
+    this.analyser = null
+    this.limiter = null
+    this._peakBuf = null
     this.decodeCache.clear()
     this.clips = []
     this.clipsKey = ''

@@ -4,6 +4,7 @@ import { useProjectStore, ASPECT_RATIOS } from '../../stores/projectStore'
 import { useShallow } from 'zustand/react/shallow'
 import { formatTimecode } from '../../utils/timeFormat'
 import { audioEngine } from '../../audio/audioEngine'
+import OutputMeter from './OutputMeter'
 import OverlayClip, {
   computeCropStyle,
   getEffectiveOverlay,
@@ -176,6 +177,9 @@ function TimelinePreview({ project, playheadTime, isPlaying, setPlayheadTime, se
           muted: trackMuted || !!c.muted,
           fadeIn: Math.max(0, Number(c.fadeIn?.duration) || 0),
           fadeOut: Math.max(0, Number(c.fadeOut?.duration) || 0),
+          // Track-level parametric EQ — engine builds a BiquadFilter chain per
+          // clip from this (audioEngine.normalizeEq). undefined/disabled = bypass.
+          eq: t.eq,
         })
       }
     }
@@ -1175,6 +1179,9 @@ export default function PreviewPanel() {
             className="w-16 h-1 accent-[#6d5efc] cursor-pointer"
           />
         </div>
+
+        {/* Master output peak meter + clip light */}
+        <OutputMeter />
 
         {/* Loop toggle */}
         <button

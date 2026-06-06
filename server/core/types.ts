@@ -217,6 +217,22 @@ export interface SketchAsset {
   createdAt: string
 }
 
+// Track-level parametric EQ. Applied to every audio source on the track
+// (audio clips AND video clips' embedded audio). Preview uses Web Audio
+// BiquadFilterNode (audioEngine.js); render uses ffmpeg bass/equalizer/treble
+// (ffmpegBuilder.ts). Both follow the Audio EQ Cookbook so freq/gain/Q match.
+export type TrackEqBandType = 'lowshelf' | 'peaking' | 'highshelf'
+export interface TrackEqBand {
+  type: TrackEqBandType
+  freq: number   // Hz
+  gain: number   // dB (±18)
+  q: number      // 0.3–10 (ignored by shelf filters)
+}
+export interface TrackEq {
+  enabled: boolean
+  bands: TrackEqBand[]   // fixed 5-band parametric (low-shelf / 3× peaking / high-shelf)
+}
+
 // Track fields are tagged the same way as VideoSegment:
 //   [RENDER]    — affects ffmpeg output
 //   [TRANSPORT] — survives to project.yaml but UI-only
@@ -229,6 +245,8 @@ export interface Track {
   locked?: boolean                          // [TRANSPORT]
   hidden?: boolean                          // [RENDER] (hidden tracks dropped from graph entirely)
   muted?: boolean                           // [RENDER] (audio dropped, video kept)
+  volume?: number                           // [RENDER] track-level audio gain (0–4); multiplies each clip's volume
+  eq?: TrackEq                              // [RENDER] track-level parametric EQ (any track carrying audio)
   gapMode?: 'black' | 'freeze'              // [RENDER] video tracks only — main-chain gap-fill behaviour
   // ── UI-only persisted preferences — do not grow without explicit reason ──
   heightSize?: 'small' | 'default' | 'large' // [TRANSPORT] timeline row height

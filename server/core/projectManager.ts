@@ -433,7 +433,7 @@ export async function removeTrack(projectId: string, trackId: string): Promise<P
 // CRUD functions own those. `id` and `type` shouldn't change after creation;
 // `clips` is mutated through addClip / updateClip / etc.; `order` is left
 // alone here because reorder is a multi-track operation we don't yet expose.
-const TRACK_MUTABLE_KEYS = ['name', 'locked', 'hidden', 'muted', 'volume', 'gapMode', 'heightSize', 'order'] as const
+const TRACK_MUTABLE_KEYS = ['name', 'locked', 'hidden', 'muted', 'volume', 'eq', 'gapMode', 'heightSize', 'order'] as const
 type TrackMutableKey = typeof TRACK_MUTABLE_KEYS[number]
 
 export async function updateTrack(projectId: string, trackId: string, updates: Partial<Track>): Promise<Project> {

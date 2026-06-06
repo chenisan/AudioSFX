@@ -1,7 +1,7 @@
 import * as path from 'path'
 import {
   Project, TextSegment, VideoSegment, AudioSegment, RenderQuality, resolveResolution,
-  isVideoSegment, isTextSegment, isAudioSegment,
+  isVideoSegment, isTextSegment, isAudioSegment, TrackEq,
 } from './types'
 import { buildScaleFilters, buildMainVideoChain, buildKFExpr } from './transitionBuilder'
 import { renderColorFillClip } from './colorFillRenderer'
@@ -22,6 +22,31 @@ interface AudioClipRef {
   fadeIn: number   // seconds, 0 = none
   fadeOut: number  // seconds, 0 = none
   volumeKF?: Keyframe[]
+  eq?: TrackEq     // track-level parametric EQ folded onto this clip
+}
+
+/** Build ffmpeg EQ filter strings from a track-level TrackEq. Mirrors the
+ * Web Audio BiquadFilter chain in audioEngine.js (Audio EQ Cookbook):
+ *   lowshelf  → bass,  highshelf → treble,  peaking → equalizer.
+ * Flat bands (|gain| < 0.01 dB) are skipped so an all-zero EQ adds nothing
+ * to the chain. Returns [] when EQ is absent or disabled. */
+function buildEqFilters(eq: TrackEq | undefined): string[] {
+  if (!eq || !eq.enabled || !Array.isArray(eq.bands)) return []
+  const out: string[] = []
+  for (const b of eq.bands) {
+    const g = Number(b?.gain) || 0
+    if (Math.abs(g) < 0.01) continue
+    const f = Number(b?.freq) || 1000
+    const q = Number(b?.q) || 1
+    if (b.type === 'lowshelf') {
+      out.push(`bass=g=${g.toFixed(2)}:f=${f.toFixed(2)}:width_type=q:w=${q.toFixed(3)}`)
+    } else if (b.type === 'highshelf') {
+      out.push(`treble=g=${g.toFixed(2)}:f=${f.toFixed(2)}:width_type=q:w=${q.toFixed(3)}`)
+    } else {
+      out.push(`equalizer=f=${f.toFixed(2)}:width_type=q:w=${q.toFixed(3)}:g=${g.toFixed(2)}`)
+    }
+  }
+  return out
 }
 
 /** Build atempo filter chain. atempo's per-instance range is [0.5, 100],
@@ -364,7 +389,14 @@ export async function buildFfmpegPlan(
   // envelope shape so preview and render stay consistent.
   const audioRefs: AudioClipRef[] = []
 
-  const pushVideoClipAudio = (seg: VideoSegment, inputIdx: number, trackMuted: boolean) => {
+  // trackVolume / trackEq fold the owning video track's track-level audio
+  // settings onto each clip (mirrors engineClipDescriptors on the preview
+  // side, which multiplies t.volume into every clip). Previously video tracks
+  // dropped track.volume at export — now both video and audio tracks honour it.
+  const pushVideoClipAudio = (
+    seg: VideoSegment, inputIdx: number, trackMuted: boolean,
+    trackVolume: number, trackEq: TrackEq | undefined,
+  ) => {
     if (trackMuted || seg.muted) return
     const absPath = resolveSource(seg.source, assetDir)
     if (!videoHasAudio.get(absPath)) return
@@ -382,19 +414,25 @@ export async function buildFfmpegPlan(
       trimEnd,
       timelineStart: seg.start,
       speed,
-      volume: seg.volume ?? 1,
+      volume: (seg.volume ?? 1) * trackVolume,
       fadeIn: Math.max(0, seg.fadeIn?.duration ?? 0),
       fadeOut: Math.max(0, seg.fadeOut?.duration ?? 0),
+      eq: trackEq,
     })
   }
 
   const mainTrackMuted = !!mainVideoTrack?.muted
-  videoSegments.forEach((seg, i) => pushVideoClipAudio(seg, mainVideoInputIdx[i], mainTrackMuted))
+  const mainTrackVolume = (mainVideoTrack as any)?.volume ?? 1
+  const mainTrackEq = (mainVideoTrack as any)?.eq as TrackEq | undefined
+  videoSegments.forEach((seg, i) => pushVideoClipAudio(seg, mainVideoInputIdx[i], mainTrackMuted, mainTrackVolume, mainTrackEq))
 
   overlayTracks.forEach((trackSegs, ti) => {
-    const trackMuted = !!overlayVideoTracks[ti]?.muted
+    const ovlTrack = overlayVideoTracks[ti]
+    const trackMuted = !!ovlTrack?.muted
+    const trackVolume = (ovlTrack as any)?.volume ?? 1
+    const trackEq = (ovlTrack as any)?.eq as TrackEq | undefined
     trackSegs.forEach((seg, ci) => {
-      pushVideoClipAudio(seg, overlayInputIdxByTrack[ti][ci], trackMuted)
+      pushVideoClipAudio(seg, overlayInputIdxByTrack[ti][ci], trackMuted, trackVolume, trackEq)
     })
   })
 
@@ -417,6 +455,7 @@ export async function buildFfmpegPlan(
         fadeIn: Math.max(0, c.fadeIn?.duration ?? 0),
         fadeOut: Math.max(0, c.fadeOut?.duration ?? 0),
         volumeKF: c.volumeKF,
+        eq: (t as any).eq as TrackEq | undefined,
       })
     })
   })
@@ -448,6 +487,10 @@ export async function buildFfmpegPlan(
       } else if (ref.volume !== 1) {
         chain.push(`volume=${ref.volume}`)
       }
+      // Track-level parametric EQ — applied after volume so band gains are
+      // relative to the post-gain signal, before fades so the envelope still
+      // shapes the EQ'd output. Mirrors audioEngine.js (gain → biquad chain).
+      chain.push(...buildEqFilters(ref.eq))
       if (fIn > 0) chain.push(`afade=t=in:st=0:d=${fIn}`)
       if (fOut > 0) chain.push(`afade=t=out:st=${clipDur - fOut}:d=${fOut}`)
       if (ref.timelineStart > 0) {
