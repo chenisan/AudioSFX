@@ -276,8 +276,58 @@ class AudioEngine {
       l.release.value = clampNum(num(pr.release, 50), 1, 1000) / 1000
       return { nodes: [l], entry: l, exit: l, refs: { lim: l } }
     }
+    if (p.type === 'reverb') {
+      // FabFilter Pro-R-inspired (approximate). True wet/dry split here is the
+      // accurate audition vs the export's linear aecho chain.
+      // input → dry → output  +  input → predelay → convolver → thickness → wet → output.
+      const pr = p.params || {}
+      const predelay = clampNum(num(pr.predelay, 20), 0, 200) / 1000
+      const space = clampNum(num(pr.space, 2), 0.2, 8)
+      const character = clampNum(num(pr.character, 50), 0, 100) / 100
+      const brightness = clampNum(num(pr.brightness, 60), 0, 100) / 100
+      const thickness = clampNum(num(pr.thickness, 30), 0, 100) / 100
+      const width = clampNum(num(pr.width, 80), 0, 100) / 100
+      const mix = clampNum(num(pr.mix, 25), 0, 100) / 100
+      const input = ctx.createGain()
+      const output = ctx.createGain()
+      const dry = ctx.createGain(); dry.gain.value = 1
+      const wet = ctx.createGain(); wet.gain.value = mix
+      const pre = ctx.createDelay(0.5); pre.delayTime.value = predelay
+      const conv = ctx.createConvolver(); conv.buffer = this._makeReverbIR(space, character, brightness, width)
+      const thick = ctx.createBiquadFilter(); thick.type = 'lowshelf'; thick.frequency.value = 200; thick.gain.value = thickness * 6
+      input.connect(dry); dry.connect(output)
+      input.connect(pre); pre.connect(conv); conv.connect(thick); thick.connect(wet); wet.connect(output)
+      return {
+        nodes: [input, output, dry, wet, pre, conv, thick],
+        entry: input, exit: output,
+        refs: { wet, pre, conv, thick, space, character, brightness, width },
+      }
+    }
     const g = ctx.createGain()
     return { nodes: [g], entry: g, exit: g, refs: {} }
+  }
+
+  // Synthesise a stereo reverb impulse. space→length; character→decay
+  // density/shape; brightness→high-freq content; width→L/R decorrelation.
+  _makeReverbIR(space, character, brightness, width) {
+    const ctx = this.ctx
+    const rate = ctx.sampleRate
+    const len = Math.max(1, Math.floor(space * rate))
+    const ir = ctx.createBuffer(2, len, rate)
+    const decayPow = 1.5 + (1 - character) * 4   // lower character → faster, sparser tail
+    const lp = 0.04 + brightness * 0.6           // brighter → larger coeff (less high-cut)
+    const L = ir.getChannelData(0)
+    const R = ir.getChannelData(1)
+    let lastL = 0, lastR = 0
+    for (let i = 0; i < len; i++) {
+      const env = Math.pow(1 - i / len, decayPow)
+      lastL = lastL + lp * ((Math.random() * 2 - 1) - lastL)
+      lastR = lastR + lp * ((Math.random() * 2 - 1) - lastR)
+      L[i] = lastL * env
+      // width: R blends from identical-to-L (mono) to independent (wide)
+      R[i] = ((1 - width) * lastL + width * lastR) * env
+    }
+    return ir
   }
 
   _updateBusParams(bus, enabled) {
@@ -306,6 +356,25 @@ class AudioEngine {
           const pr = p.params || {}
           pn.refs.lim.threshold.setTargetAtTime(clampNum(num(pr.threshold, -1), -60, 0), now, tc)
           pn.refs.lim.release.setTargetAtTime(clampNum(num(pr.release, 50), 1, 1000) / 1000, now, tc)
+        } else if (p.type === 'reverb') {
+          const pr = p.params || {}
+          const predelay = clampNum(num(pr.predelay, 20), 0, 200) / 1000
+          const space = clampNum(num(pr.space, 2), 0.2, 8)
+          const character = clampNum(num(pr.character, 50), 0, 100) / 100
+          const brightness = clampNum(num(pr.brightness, 60), 0, 100) / 100
+          const thickness = clampNum(num(pr.thickness, 30), 0, 100) / 100
+          const width = clampNum(num(pr.width, 80), 0, 100) / 100
+          const mix = clampNum(num(pr.mix, 25), 0, 100) / 100
+          pn.refs.wet.gain.setTargetAtTime(mix, now, tc)
+          pn.refs.pre.delayTime.setTargetAtTime(predelay, now, tc)
+          pn.refs.thick.gain.setTargetAtTime(thickness * 6, now, tc)
+          // Regenerate the impulse only when an IR-affecting param changes (costly).
+          if (Math.abs(pn.refs.space - space) > 0.01 || Math.abs(pn.refs.character - character) > 0.01 ||
+              Math.abs(pn.refs.brightness - brightness) > 0.01 || Math.abs(pn.refs.width - width) > 0.01) {
+            pn.refs.conv.buffer = this._makeReverbIR(space, character, brightness, width)
+            pn.refs.space = space; pn.refs.character = character
+            pn.refs.brightness = brightness; pn.refs.width = width
+          }
         }
       } catch {}
     }
@@ -317,6 +386,19 @@ class AudioEngine {
     const bus = this.trackBuses.get(trackId)
     if (!bus) return { peak: 0, db: -Infinity, clip: false }
     return this._readPeak(bus.analyser, bus.buf)
+  }
+
+  // Frequency-domain magnitudes (0–255 per bin) of a track's post-FX signal —
+  // drives the EQ graph's live spectrum overlay. Null when the track has no bus.
+  getTrackSpectrum(trackId) {
+    const bus = this.trackBuses.get(trackId)
+    if (!bus || !bus.analyser) return null
+    const a = bus.analyser
+    if (!bus.freqBuf || bus.freqBuf.length !== a.frequencyBinCount) {
+      bus.freqBuf = new Uint8Array(a.frequencyBinCount)
+    }
+    a.getByteFrequencyData(bus.freqBuf)
+    return { data: bus.freqBuf, sampleRate: this.ctx.sampleRate, fftSize: a.fftSize }
   }
 
   setProjectId(projectId) {

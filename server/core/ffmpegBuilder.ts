@@ -80,6 +80,40 @@ function buildLimiterFilter(pr: any): string {
   return `alimiter=limit=${limit.toFixed(5)}:attack=5:release=${release}:level=disabled`
 }
 
+/** Reverb (FabFilter Pro-R-inspired, approximate) via an aecho echo-cluster +
+ * tone shaping (ffmpeg has no native reverb). MIRROR: src/audio/audioEngine.js
+ * reverb node uses a Web Audio ConvolverNode with a synthesised impulse — a
+ * different algorithm, so this is an approximation (like comp/limiter), not
+ * sample-exact. This stays a linear chain (the per-track plugin chain is linear),
+ * so brightness/thickness/width colour the whole signal — the preview's true
+ * wet/dry split is the accurate audition.
+ *   predelay ms · space s (tail length) · character (tap density) ·
+ *   brightness (high cut) · thickness (low shelf) · width (stereo) · mix (wet). */
+function buildReverbFilter(pr: any): string {
+  const predelay = clampRange(Number(pr?.predelay), 0, 200, 20)
+  const space = clampRange(Number(pr?.space), 0.2, 8, 2)
+  const character = clampRange(Number(pr?.character), 0, 100, 50) / 100
+  const brightness = clampRange(Number(pr?.brightness), 0, 100, 60) / 100
+  const thickness = clampRange(Number(pr?.thickness), 0, 100, 30) / 100
+  const width = clampRange(Number(pr?.width), 0, 100, 80) / 100
+  const mix = clampRange(Number(pr?.mix), 0, 100, 25) / 100
+
+  const nTaps = Math.round(3 + character * 3)            // 3..6 taps
+  const baseMs = 30 + space * 22                         // spacing grows with space (s)
+  const delays: string[] = []
+  const decays: string[] = []
+  for (let i = 1; i <= nTaps; i++) {
+    delays.push(String(Math.round(predelay + baseMs * i * (1 + character * 0.3))))
+    const fall = Math.pow(1 - i / (nTaps + 1), 1.5 / Math.max(0.3, space))
+    decays.push((mix * 0.6 * fall).toFixed(3))
+  }
+  const parts = [`aecho=1:0.9:${delays.join('|')}:${decays.join('|')}`]
+  parts.push(`lowpass=f=${Math.round(1500 + brightness * 15000)}`)        // brightness
+  if (thickness > 0.01) parts.push(`bass=g=${(thickness * 6).toFixed(1)}:f=180`)  // thickness
+  if (width > 0.01) parts.push(`extrastereo=m=${(1 + width).toFixed(2)}`)         // width
+  return parts.join(',')
+}
+
 // Master-bus brickwall limiter on the final mix. ceilingDb → linear limit.
 // MIRROR: src/audio/audioEngine.js `setMasterLimiter` is the preview-side twin
 // (Web Audio DynamicsCompressor with threshold = ceilingDb). Keep in sync.
@@ -101,6 +135,8 @@ function buildPluginFilters(plugins: any[]): string[] {
       out.push(buildCompressorFilter(p.params))
     } else if (p.type === 'limiter') {
       out.push(buildLimiterFilter(p.params))
+    } else if (p.type === 'reverb') {
+      out.push(buildReverbFilter(p.params))
     }
   }
   return out

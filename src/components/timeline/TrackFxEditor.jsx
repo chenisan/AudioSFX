@@ -3,6 +3,7 @@ import { useProjectStore } from '../../stores/projectStore'
 import { getPlugins, makePlugin, PLUGIN_LABELS } from '../../utils/trackPlugins'
 import TrackEqPanel from './TrackEqPanel'
 import TrackDynamicsPanel from './TrackDynamicsPanel'
+import TrackReverbPanel from './TrackReverbPanel'
 import FloatingWindow from './FloatingWindow'
 
 // Track effect-chain editor (rendered inline in the left column "效果" tab).
@@ -111,6 +112,8 @@ export default function TrackFxEditor({ track }) {
               className="w-full text-left text-[11px] px-2 py-1 text-[#ccc] hover:bg-[#3a3a3a]">壓縮器</button>
             <button onClick={() => add('limiter')}
               className="w-full text-left text-[11px] px-2 py-1 text-[#ccc] hover:bg-[#3a3a3a]">限幅器</button>
+            <button onClick={() => add('reverb')}
+              className="w-full text-left text-[11px] px-2 py-1 text-[#ccc] hover:bg-[#3a3a3a]">殘響（Reverb）</button>
           </div>
         )}
       </div>
@@ -124,14 +127,20 @@ export default function TrackFxEditor({ track }) {
           <FloatingWindow
             title={`${track.name} · ${PLUGIN_LABELS[editing.type] ?? editing.type}`}
             onClose={() => setEditingId(null)}
-            width={editing.type === 'eq' ? 340 : 300}
+            width={editing.type === 'eq' ? 480 : editing.type === 'reverb' ? 620 : 300}
             initialX={380}
             initialY={130}
           >
             {editing.type === 'eq' ? (
               <TrackEqPanel
                 bands={editing.params?.bands ?? []}
+                trackId={track.id}
                 onChange={(bands, persist) => setParams(editing.id, { ...editing.params, bands }, persist)}
+              />
+            ) : editing.type === 'reverb' ? (
+              <TrackReverbPanel
+                params={editing.params ?? {}}
+                onChange={(params, persist) => setParams(editing.id, params, persist)}
               />
             ) : (
               <TrackDynamicsPanel

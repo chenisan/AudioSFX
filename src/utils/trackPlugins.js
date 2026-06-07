@@ -71,11 +71,22 @@ export function makeLimiterPlugin() {
   }
 }
 
+export function makeReverbPlugin() {
+  return {
+    id: newPluginId('reverb'),
+    type: 'reverb',
+    enabled: true,
+    // FabFilter Pro-R-inspired set. space in seconds; rest in %; predelay ms.
+    params: { predelay: 20, space: 2.0, character: 50, brightness: 60, thickness: 30, width: 80, mix: 25 },
+  }
+}
+
 // type → factory, for the "add effect" menu.
 export function makePlugin(type) {
   if (type === 'eq') return makeEqPlugin()
   if (type === 'compressor') return makeCompressorPlugin()
   if (type === 'limiter') return makeLimiterPlugin()
+  if (type === 'reverb') return makeReverbPlugin()
   return null
 }
 
@@ -83,4 +94,5 @@ export const PLUGIN_LABELS = {
   eq: 'EQ',
   compressor: '壓縮器',
   limiter: '限幅器',
+  reverb: '殘響',
 }

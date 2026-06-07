@@ -239,7 +239,7 @@ export interface TrackEq {
 // Preview = Web Audio nodes (audioEngine.js); render = ffmpeg filters
 // (ffmpegBuilder.ts). Per plugin: `enabled` is the single on/off source of truth
 // (the params object holds no enabled flag).
-export type TrackPluginType = 'eq' | 'compressor' | 'limiter'
+export type TrackPluginType = 'eq' | 'compressor' | 'limiter' | 'reverb'
 
 export interface EqPluginParams {
   bands: TrackEqBand[]   // fixed 5-band parametric
@@ -256,7 +256,18 @@ export interface LimiterPluginParams {
   threshold: number   // dB (ceiling)
   release: number     // ms
 }
-export type TrackPluginParams = EqPluginParams | CompressorPluginParams | LimiterPluginParams
+// FabFilter Pro-R-inspired layout (approximate DSP). predelay ms; space seconds;
+// the rest 0–100 %.
+export interface ReverbPluginParams {
+  predelay: number    // 0–200 ms   (pre-delay before the tail)
+  space: number       // 0.2–8 s    (decay time / room size — the big knob)
+  character: number   // 0–100 %    (tail density / diffusion)
+  brightness: number  // 0–100 %    (high-freq content of the tail)
+  thickness: number   // 0–100 %    (low-freq body)
+  width: number       // 0–100 %    (stereo spread)
+  mix: number         // 0–100 %    (wet / dry)
+}
+export type TrackPluginParams = EqPluginParams | CompressorPluginParams | LimiterPluginParams | ReverbPluginParams
 
 export interface TrackPlugin {
   id: string                   // stable id (used for reorder / remove)
