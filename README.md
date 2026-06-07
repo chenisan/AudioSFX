@@ -55,7 +55,8 @@ npm install
 npm run dev          # 前端 :6300 / 後端 :6301
 ```
 
-**Python 推論引擎**（音效生成需要，GPU）— UI 右上「引擎」面板啟動，或手動：
+**Python 推論引擎**（音效生成需要，GPU）— **首次需自行安裝（下載權重等），詳見 [ENGINES.md](./ENGINES.md)**。
+裝好後從 UI 右上「引擎」面板啟動，或手動：
 ```powershell
 pwsh engines/start-woosh.ps1     # :6302  Woosh
 pwsh engines/start-mmaudio.ps1   # :6303  MMAudio
@@ -131,7 +132,8 @@ npm install
 npm run dev          # frontend :6300 / backend :6301
 ```
 
-**Python inference engines** (needed for SFX generation, GPU) — start from the "引擎" panel (top-right), or manually:
+**Python inference engines** (needed for SFX generation, GPU) — **first-time setup (download weights, etc.) is on you: see [ENGINES.md](./ENGINES.md)**.
+Once installed, start them from the "引擎" panel (top-right of the UI), or manually:
 ```powershell
 pwsh engines/start-woosh.ps1     # :6302  Woosh
 pwsh engines/start-mmaudio.ps1   # :6303  MMAudio

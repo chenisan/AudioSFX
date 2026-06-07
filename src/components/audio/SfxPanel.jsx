@@ -88,6 +88,13 @@ export default function SfxPanel() {
         {wooshDown && (
           <p className="text-[10px] text-[#f0a020] leading-relaxed">
             推論服務未啟動。請先執行 <code className="text-[#aaa]">engines/start-woosh.ps1</code>，再按上面重試。
+            <br />
+            首次使用？<a
+              href="https://github.com/chenisan/AudioSFX/blob/main/ENGINES.md"
+              target="_blank"
+              rel="noreferrer"
+              className="text-[#6d5efc] hover:underline"
+            >如何下載安裝 AI 引擎 →</a>
           </p>
         )}
         {error && !wooshDown && <p className="text-[10px] text-red-400 leading-relaxed">{error}</p>}
