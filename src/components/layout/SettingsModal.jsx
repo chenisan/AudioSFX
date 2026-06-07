@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useProjectStore, ASPECT_RATIOS } from '../../stores/projectStore'
+import AboutPanel from '../common/AboutPanel'
 
 const TABS = [
   { id: 'project', label: '專案' },
   { id: 'performance', label: '效能' },
   { id: 'general', label: '一般' },
+  { id: 'about', label: '關於' },
 ]
 
 const FORMAT_LABEL = { mp4: 'H.264 MP4', mov: 'ProRes MOV', webm: 'VP9 WebM' }
@@ -172,19 +174,10 @@ export default function SettingsModal({ onClose, defaultTab = 'project' }) {
                   <span className="text-xs text-[#ccc]">MP4 (H.264)</span>
                 </div>
               </SettingGroup>
-
-              <SettingGroup label="關於">
-                <div className="flex items-center justify-between py-1.5">
-                  <span className="text-xs text-[#999]">版本</span>
-                  <span className="text-xs text-[#ccc]">AudioSFX v0.1.0</span>
-                </div>
-                <div className="flex items-center justify-between py-1.5">
-                  <span className="text-xs text-[#999]">引擎</span>
-                  <span className="text-xs text-[#ccc]">ffmpeg + Node.js · MMAudio + Woosh</span>
-                </div>
-              </SettingGroup>
             </div>
           )}
+
+          {tab === 'about' && <AboutTab />}
         </div>
 
         {/* Footer */}
@@ -273,6 +266,23 @@ function ProjectInfoTab() {
         <div className="grid grid-cols-2 gap-x-6">
           <ProjInfoRow label="建立時間" value={fmtTime(project.createdAt)} mono />
           <ProjInfoRow label="最後修改" value={fmtTime(project.updatedAt)} mono />
+        </div>
+      </SettingGroup>
+    </div>
+  )
+}
+
+/**
+ * About tab — software intro + author links. Links open in the system browser.
+ */
+function AboutTab() {
+  return (
+    <div className="space-y-6">
+      <AboutPanel />
+      <SettingGroup label="技術">
+        <div className="flex items-center justify-between py-1.5">
+          <span className="text-xs text-[#999]">引擎</span>
+          <span className="text-xs text-[#ccc]">ffmpeg + Node.js · MMAudio + Woosh</span>
         </div>
       </SettingGroup>
     </div>

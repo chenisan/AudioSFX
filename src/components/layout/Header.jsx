@@ -4,6 +4,7 @@ import { useProject } from '../../hooks/useProject'
 import { useRender } from '../../hooks/useRender'
 import RenderProgress from '../render/RenderProgress'
 import EngineControls from '../services/EngineControls'
+import AboutPanel from '../common/AboutPanel'
 
 // Spinning loader for icon buttons in a busy state (saving / rendering).
 function Spinner() {
@@ -30,6 +31,7 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
   const { rendering, progress, messages, outputUrl, error, render, reset } = useRender()
   const [saving, setSaving] = useState(false)
   const [showExport, setShowExport] = useState(false)
+  const [showExportAbout, setShowExportAbout] = useState(false)   // 關於作者 gate before export
 
   const handleSave = async () => {
     if (!projectId) return
@@ -53,7 +55,8 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
       }
       setSaving(false)
     }
-    setShowExport(true)
+    // Show the 關於作者 gate first; its「下一步」opens the actual export dialog.
+    setShowExportAbout(true)
   }
 
   return (
@@ -148,6 +151,13 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
         </button>
       </header>
 
+      {showExportAbout && (
+        <ExportAboutGate
+          onClose={() => setShowExportAbout(false)}
+          onNext={() => { setShowExportAbout(false); setShowExport(true) }}
+        />
+      )}
+
       {showExport && !rendering && (
         <ExportModal
           onRender={(opts) => { if (projectId) render(projectId, opts) }}
@@ -200,6 +210,34 @@ function resolutionIdToQuality(resId) {
   if (resId === '540p') return 'preview'
   if (resId === '720p') return '720p'
   return 'high'   // '1080p' and any future label fall here
+}
+
+// ── Export About gate — shown before the export dialog ─────────────────────────
+// Surfaces the author / links on every export; 「下一步」proceeds to the dialog.
+function ExportAboutGate({ onClose, onNext }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-[#1a1a1a] border border-[#333] rounded-lg w-[480px] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="p-4 border-b border-[#2a2a2a] flex justify-between items-center">
+          <h2 className="font-medium text-white">關於作者</h2>
+          <button onClick={onClose} className="text-[#666] hover:text-white text-xl leading-none">×</button>
+        </div>
+        <div className="p-5">
+          <AboutPanel />
+        </div>
+        <div className="p-4 border-t border-[#2a2a2a] flex justify-end items-center gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 bg-[#2a2a2a] hover:bg-[#333] text-[#aaa] text-sm rounded"
+          >取消</button>
+          <button
+            onClick={onNext}
+            className="px-6 py-1.5 text-white text-sm rounded font-medium bg-[#6d5efc] hover:bg-[#5848e0]"
+          >下一步</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ── Export Modal (like CapCut's export dialog) ─────────────────────────────────
