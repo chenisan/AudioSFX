@@ -46,6 +46,9 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
   const setTrackGapMode = useProjectStore(s => s.setTrackGapMode)
   const setLastCursor = useProjectStore(s => s.setLastCursor)
   const setSelectedClipsBatch = useProjectStore(s => s.setSelectedClipsBatch)
+  // Selected track = the track holding the primary selected clip (set by both
+  // clicking a clip and clicking the track label / batch-select).
+  const isSelectedTrack = useProjectStore(s => s.selectedClip?.trackId === trackId)
   const { onDrop, onDragOver } = useAssetDrop({ trackId, trackType: track?.type, containerRef: contentRef })
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState('')
@@ -106,7 +109,9 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
           inside the gutter and the clip lane / playhead stay aligned. The meter
           hugs the right edge → visually sits at the track's left edge. */}
       <div
-        className={`flex-shrink-0 flex border-r border-[#2a2a2a] ${track.muted ? 'bg-[#241d0f]' : 'bg-[#1a1a1a]'}`}
+        className={`flex-shrink-0 flex border-r border-[#2a2a2a] ${
+          track.muted ? 'bg-[#241d0f]' : isSelectedTrack ? 'bg-[#1f1b30]' : 'bg-[#1a1a1a]'
+        } ${isSelectedTrack ? 'shadow-[inset_3px_0_0_#6d5efc]' : ''}`}
         style={{ width: LABEL_WIDTH }}
       >
       <div
@@ -305,7 +310,7 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
 
       {/* Clip area */}
       <div
-        className={`relative flex-1 overflow-hidden ${track.muted ? 'bg-[#2c2510]' : track.locked ? 'bg-[#1e1e1e]' : 'bg-[#252525]'}`}
+        className={`relative flex-1 overflow-hidden ${track.muted ? 'bg-[#2c2510]' : isSelectedTrack ? 'bg-[#241f38]' : track.locked ? 'bg-[#1e1e1e]' : 'bg-[#252525]'}`}
         style={{ minWidth: totalWidth, opacity: track.hidden ? 0.3 : 1 }}
         onClick={clearSelection}
         onMouseMove={(e) => {
