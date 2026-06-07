@@ -14,6 +14,7 @@ import Timeline from './components/timeline/Timeline'
 import Toast from './components/common/Toast'
 import SettingsModal from './components/layout/SettingsModal'
 import AboutPanel from './components/common/AboutPanel'
+import GuidedTour from './components/common/GuidedTour'
 
 // ── Project Modal ──────────────────────────────────────────────────────────────
 function ProjectModal({ onClose }) {
@@ -122,7 +123,7 @@ function LeftPanel() {
   const [tab, setTab] = useState('assets')
   return (
     <div className="flex flex-col h-full bg-[#1a1a1a]">
-      <div className="flex border-b border-[#2a2a2a] shrink-0">
+      <div data-tour="left-tabs" className="flex border-b border-[#2a2a2a] shrink-0">
         {LEFT_TABS.map(([id, label]) => (
           <button
             key={id}
@@ -140,19 +141,38 @@ function LeftPanel() {
   )
 }
 
-// ── Startup About window — shown once on app open (the brand poster + intro) ────
-function StartupAboutModal({ onClose }) {
+// ── Startup About window — shown on every app open (brand poster + intro). Its
+// 「下一步」launches the feature tour; the checkbox disables the tour for next
+// time (the About page itself still always shows).
+function StartupAboutModal({ dismissed, onToggleDismiss, onSkip, onNext }) {
   return (
     <div className="fixed inset-0 z-[70] bg-black/85 flex items-center justify-center p-4">
       <div className="bg-[#1a1a1a] border border-[#333] rounded-xl w-[460px] max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
         <div className="overflow-y-auto p-5">
           <AboutPanel />
         </div>
-        <div className="p-4 border-t border-[#2a2a2a] flex justify-end shrink-0">
-          <button
-            onClick={onClose}
-            className="px-6 py-1.5 text-white text-sm rounded font-medium bg-[#6d5efc] hover:bg-[#5848e0]"
-          >進入 AudioSFX</button>
+        <div className="p-4 border-t border-[#2a2a2a] flex items-center justify-between shrink-0 gap-3">
+          <label className="flex items-center gap-2 text-[11px] text-[#888] hover:text-[#aaa] cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={dismissed}
+              onChange={e => onToggleDismiss(e.target.checked)}
+              className="accent-[#6d5efc] cursor-pointer"
+            />
+            下次開啟不再顯示導引
+          </label>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={onSkip}
+              className="px-4 py-1.5 bg-[#2a2a2a] hover:bg-[#333] text-[#aaa] text-sm rounded"
+            >{dismissed ? '進入 AudioSFX' : '跳過'}</button>
+            {!dismissed && (
+              <button
+                onClick={onNext}
+                className="px-5 py-1.5 text-white text-sm rounded font-medium bg-[#6d5efc] hover:bg-[#5848e0]"
+              >下一步：功能導引 ▶</button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -168,6 +188,14 @@ export default function App() {
   const [settingsDefaultTab, setSettingsDefaultTab] = useState('performance')
   const [globalDropping, setGlobalDropping] = useState(false)
   const [showStartupAbout, setShowStartupAbout] = useState(true)   // 開啟時先顯示關於我
+  const [showTour, setShowTour] = useState(false)
+  const [tourDismissed, setTourDismissed] = useState(() => {
+    try { return localStorage.getItem('13soul.tourDismissed') === '1' } catch { return false }
+  })
+  const setDismiss = (v) => {
+    setTourDismissed(v)
+    try { localStorage.setItem('13soul.tourDismissed', v ? '1' : '0') } catch {}
+  }
 
   const openSettings = (tab = 'performance') => {
     setSettingsDefaultTab(tab)
@@ -269,7 +297,17 @@ export default function App() {
       )}
 
       {/* Startup About — first thing shown when the app opens */}
-      {showStartupAbout && <StartupAboutModal onClose={() => setShowStartupAbout(false)} />}
+      {showStartupAbout && (
+        <StartupAboutModal
+          dismissed={tourDismissed}
+          onToggleDismiss={setDismiss}
+          onSkip={() => setShowStartupAbout(false)}
+          onNext={() => { setShowStartupAbout(false); setShowTour(true) }}
+        />
+      )}
+
+      {/* Feature tour — launched from the startup About「下一步」 */}
+      {showTour && <GuidedTour onClose={() => setShowTour(false)} />}
 
       <Toast />
       <AudioGenIndicator />

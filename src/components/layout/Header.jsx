@@ -69,6 +69,7 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
 
         {/* Project selector */}
         <button
+          data-tour="project"
           onClick={onOpenProjectModal}
           className="flex items-center gap-1.5 bg-[#1a1a1a] hover:bg-[#252525] border border-[#333] rounded px-3 py-1 text-sm text-[#ccc] transition-colors"
         >
@@ -83,6 +84,7 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
 
         {/* Save */}
         <button
+          data-tour="save"
           onClick={handleSave}
           disabled={!projectId || saving || !isDirty}
           className="w-8 h-8 flex items-center justify-center rounded text-[#aaa] hover:text-white hover:bg-[#1f1f1f] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#aaa] transition-colors"
@@ -97,6 +99,7 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
 
         {/* Export — auto-saves first if dirty so the render uses the latest state */}
         <button
+          data-tour="export"
           onClick={handleOpenExport}
           disabled={!projectId || rendering || saving}
           data-testid="header-export"
@@ -112,6 +115,7 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
 
         {/* Floating preview toggle */}
         <button
+          data-tour="preview"
           onClick={togglePreviewOpen}
           className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
             previewOpen ? 'text-[#6d5efc]' : 'text-[#666] hover:text-[#aaa]'
@@ -125,6 +129,7 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
 
         {/* Floating SFX-generation toggle */}
         <button
+          data-tour="sfx"
           onClick={toggleSfxOpen}
           className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
             sfxOpen ? 'text-[#6d5efc]' : 'text-[#666] hover:text-[#aaa]'
@@ -137,10 +142,13 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
         </button>
 
         {/* Inference service control / monitor */}
-        <EngineControls />
+        <div data-tour="engine" className="flex items-center">
+          <EngineControls />
+        </div>
 
         {/* Settings */}
         <button
+          data-tour="settings"
           onClick={onOpenSettings}
           className="w-8 h-8 flex items-center justify-center text-[#666] hover:text-[#aaa] transition-colors"
           title="設定"
