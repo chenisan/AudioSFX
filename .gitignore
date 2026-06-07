@@ -1,8 +1,7 @@
 node_modules/
 dist/
 
-# Local Claude Code MCP config + build/run logs (not part of the app)
-.mcp.json
+# Build/run logs (not part of the app)
 *.log
 
 # AI engines: MMAudio / Woosh are full upstream OSS clones (each has its own

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "audiosfx": {
+      "command": "cmd",
+      "args": ["/c", "npx", "tsx", "server/mcp-server.mts"],
+      "env": {
+        "AUDIOSFX_API_BASE": "http://localhost:6301"
+      }
+    }
+  }
+}

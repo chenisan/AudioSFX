@@ -19,6 +19,7 @@
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "start": "node dist/server/index.js",
+    "mcp": "tsx server/mcp-server.mts",
     "preelectron:dev": "node scripts/kill-ports.mjs 6301",
     "electron:dev": "npm run build && electron .",
     "electron:pack": "npm run build && electron-builder --dir",
@@ -27,6 +28,7 @@
     "build:native:debug": "cd native/media-engine && napi build --platform"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@napi-rs/canvas": "^0.1.99",
     "cors": "^2",
     "dotenv": "^17.4.2",
