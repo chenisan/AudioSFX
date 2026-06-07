@@ -442,6 +442,22 @@ export function createProjectDocSlice(set, get) {
       return get()._patchTrack(trackId, { muted: next }, x => ({ ...x, muted: next }))
     },
 
+    /** Mute / un-mute every sound-bearing track (audio + video) at once. Toggle:
+     *  any un-muted target → mute all; all already muted → un-mute all. Patches
+     *  SEQUENTIALLY (not Promise.all): _patchTrack replaces the whole project
+     *  from each server response, so concurrent responses would clobber each
+     *  other — awaiting in turn lets the final response carry every change. */
+    async toggleAllMuted() {
+      const tracks = get().project?.timeline?.tracks ?? []
+      const targets = tracks.filter(t => t.type === 'audio' || t.type === 'video')
+      if (!targets.length) return
+      const next = targets.some(t => !t.muted)
+      for (const t of targets) {
+        if (!!t.muted === next) continue
+        await get()._patchTrack(t.id, { muted: next }, x => ({ ...x, muted: next }))
+      }
+    },
+
     setTrackHeight(trackId, height) {
       return get()._patchTrack(trackId, { heightSize: height }, t => ({ ...t, heightSize: height }))
     },

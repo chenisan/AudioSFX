@@ -3,6 +3,8 @@ import { useProjectStore } from '../../stores/projectStore'
 import { useAssetDrop } from '../../hooks/useDragDrop'
 import Clip from './Clip'
 import TrackMeter from './TrackMeter'
+import PointContextMenu from './PointContextMenu'
+import CreateSfxModal from '../audio/CreateSfxModal'
 import { timeToPx, pxToTime } from '../../utils/timeFormat'
 
 const TRACK_TYPE_ICONS = { video: '🎬', text: '🔤', audio: '🎵', script: '🎨' }
@@ -49,6 +51,8 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
   const [editName, setEditName] = useState('')
   const [showMenu, setShowMenu] = useState(false)
   const [subMenu, setSubMenu] = useState(null)  // 'height' | 'waveform'
+  const [pointMenu, setPointMenu] = useState(null)   // empty-space right-click menu: { x, y, time }
+  const [createSfx, setCreateSfx] = useState(null)   // Create-SFX modal: { trackId, time }
   const inputRef = useRef(null)
   const menuRef = useRef(null)
 
@@ -102,7 +106,7 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
           inside the gutter and the clip lane / playhead stay aligned. The meter
           hugs the right edge → visually sits at the track's left edge. */}
       <div
-        className="flex-shrink-0 flex border-r border-[#2a2a2a] bg-[#1a1a1a]"
+        className={`flex-shrink-0 flex border-r border-[#2a2a2a] ${track.muted ? 'bg-[#241d0f]' : 'bg-[#1a1a1a]'}`}
         style={{ width: LABEL_WIDTH }}
       >
       <div
@@ -121,7 +125,7 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
             className="cursor-ns-resize text-[#3a3a3a] hover:text-[#666] shrink-0 select-none"
             title="拖拉重排順序"
           >⠿</div>
-          <span className="text-[10px] shrink-0">{TRACK_TYPE_ICONS[track.type] ?? '🎬'}</span>
+          <span className="text-[10px] shrink-0">{track.role === 'sfx' ? '🔊' : (TRACK_TYPE_ICONS[track.type] ?? '🎬')}</span>
           {isEditing ? (
             <input
               ref={inputRef}
@@ -301,7 +305,7 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
 
       {/* Clip area */}
       <div
-        className={`relative flex-1 overflow-hidden ${track.locked ? 'bg-[#1e1e1e]' : 'bg-[#252525]'}`}
+        className={`relative flex-1 overflow-hidden ${track.muted ? 'bg-[#2c2510]' : track.locked ? 'bg-[#1e1e1e]' : 'bg-[#252525]'}`}
         style={{ minWidth: totalWidth, opacity: track.hidden ? 0.3 : 1 }}
         onClick={clearSelection}
         onMouseMove={(e) => {
@@ -309,6 +313,14 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
           const t = pxToTime(e.clientX - rect.left, zoom)
           setLastCursor({ trackId: track.id, time: Math.max(0, t) })
         }}
+        onContextMenu={track.type === 'audio' && !track.locked ? (e) => {
+          // Empty-space right-click only — Clip stops propagation, so this never
+          // fires when the cursor is over a clip.
+          e.preventDefault()
+          const rect = e.currentTarget.getBoundingClientRect()
+          const t = Math.max(0, pxToTime(e.clientX - rect.left, zoom))
+          setPointMenu({ x: e.clientX, y: e.clientY, time: t })
+        } : undefined}
         onDrop={track.locked ? undefined : onDrop}
         onDragOver={track.locked ? undefined : onDragOver}
       >
@@ -317,6 +329,7 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
             key={i}
             trackId={track.id}
             trackType={track.type}
+            trackRole={track.role}
             index={i}
             clip={clip}
             containerRef={contentRef}
@@ -324,6 +337,29 @@ export default memo(function Track({ trackId, contentRef, isDragging, isDragOver
           />
         ))}
       </div>
+
+      {pointMenu && (
+        <PointContextMenu
+          x={pointMenu.x}
+          y={pointMenu.y}
+          onClose={() => setPointMenu(null)}
+          items={[
+            {
+              label: '建立音效',
+              accent: true,
+              action: () => { setCreateSfx({ trackId: track.id, time: pointMenu.time }); setPointMenu(null) },
+            },
+          ]}
+        />
+      )}
+
+      {createSfx && (
+        <CreateSfxModal
+          trackId={createSfx.trackId}
+          time={createSfx.time}
+          onClose={() => setCreateSfx(null)}
+        />
+      )}
     </div>
   )
 })

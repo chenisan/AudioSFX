@@ -52,6 +52,7 @@ export default function Timeline() {
   const redo = useProjectStore(s => s.redo)
   const swapTrackOrder = useProjectStore(s => s.swapTrackOrder)
   const updateClip = useProjectStore(s => s.updateClip)
+  const toggleAllMuted = useProjectStore(s => s.toggleAllMuted)
   const contentRef = useRef(null)
   const tracksRef = useRef(null)
   const [viewportWidth, setViewportWidth] = useState(0)
@@ -305,6 +306,11 @@ export default function Timeline() {
     setShowAddMenu(false)
   }
 
+  // "全部靜音" reflects the sound-bearing tracks (audio + video). Active (amber)
+  // when every one is muted, so the button doubles as a "mute all / clear all".
+  const soundTracks = tracks.filter(t => t.type === 'audio' || t.type === 'video')
+  const allMuted = soundTracks.length > 0 && soundTracks.every(t => t.muted)
+
   return (
     <div className="flex flex-col h-full bg-[#1a1a1a] select-none">
       {/* Toolbar */}
@@ -463,7 +469,25 @@ export default function Timeline() {
         <div style={{ minWidth: totalWidth + LABEL_WIDTH, position: 'relative' }}>
           {/* Ruler row — sticky so it stays pinned while many tracks scroll vertically */}
           <div className="flex border-b border-[#2a2a2a] sticky top-0 z-40 bg-[#1a1a1a]" style={{ height: RULER_HEIGHT }}>
-            <div style={{ width: LABEL_WIDTH, flexShrink: 0 }} className="bg-[#1a1a1a] border-r border-[#2a2a2a]" />
+            <div style={{ width: LABEL_WIDTH, flexShrink: 0 }} className="bg-[#1a1a1a] border-r border-[#2a2a2a] flex items-center px-1.5">
+              <button
+                onClick={toggleAllMuted}
+                disabled={soundTracks.length === 0}
+                className={`flex items-center gap-1 px-1.5 h-5 rounded text-[9px] font-medium transition-colors ${
+                  soundTracks.length === 0
+                    ? 'bg-[#1a1a1a] text-[#444] cursor-not-allowed'
+                    : allMuted
+                      ? 'bg-[#e0b341] text-black shadow-[0_0_6px_rgba(224,179,65,0.4)]'
+                      : 'bg-[#262629] text-[#888] hover:text-white border border-[#333]'
+                }`}
+                title={allMuted ? '解除全部靜音' : '全部靜音（所有音 / 視軌）'}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+                </svg>
+                {allMuted ? '全部解除' : '全部靜音'}
+              </button>
+            </div>
             <div className="relative flex-1 bg-[#111] overflow-hidden">
               <TimeRuler />
               {/* Export range handles (In/Out markers) */}

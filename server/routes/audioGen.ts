@@ -17,8 +17,8 @@ function resolveSource(projectId: string, source: unknown): string | null {
   return fs.existsSync(abs) ? abs : null
 }
 
-async function land(res: Response, projectId: string, result: GenResult, baseName: string) {
-  const saved = await saveGeneratedAudio(projectId, result, baseName, Date.now())
+async function land(res: Response, projectId: string, result: GenResult, baseName: string, opts?: { exactName?: boolean }) {
+  const saved = await saveGeneratedAudio(projectId, result, baseName, Date.now(), opts)
   res.json(saved)
 }
 
@@ -33,14 +33,17 @@ router.get('/health', async (_req, res) => {
 })
 
 // POST /api/audio/sfx — text → SFX (Woosh-DFlow)
-//   body: { projectId, prompt, num_steps?, cfg?, seed? }
+//   body: { projectId, prompt, name?, num_steps?, cfg?, seed? }
+//   `name` is an optional custom filename: used verbatim (case preserved, no
+//   timestamp, deduped on collision). Blank → auto-name from the prompt.
 router.post('/sfx', async (req: Request, res: Response) => {
-  const { projectId, prompt, num_steps, cfg, seed } = req.body ?? {}
+  const { projectId, prompt, name, num_steps, cfg, seed } = req.body ?? {}
   if (!isValidProjectId(projectId)) return res.status(400).json({ error: 'projectId (uuid) required' })
   if (typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'prompt required' })
+  const hasName = typeof name === 'string' && !!name.trim()
   try {
     const result = await generateSfx({ prompt: prompt.trim(), num_steps, cfg, seed })
-    await land(res, projectId, result, prompt)
+    await land(res, projectId, result, hasName ? name.trim() : prompt, { exactName: hasName })
   } catch (e) { handleError(res, e) }
 })
 
