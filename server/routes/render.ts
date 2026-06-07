@@ -24,8 +24,9 @@ router.post('/', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'project_not_found', detail: e?.message }) as any
   }
 
-  // AudioSFX is non-commercial / single-machine — no tier gate, no watermark.
-  const applyWatermark = false
+  // Corner branding watermark ("Isan 13soul", bottom-right) burned into every
+  // export. Always on — it's branding, not a tier gate.
+  const applyWatermark = true
 
   // Set up SSE
   res.setHeader('Content-Type', 'text/event-stream')

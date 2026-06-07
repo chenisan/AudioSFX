@@ -423,19 +423,23 @@ export async function buildFfmpegPlan(
       videoFinalLabel = 'vfinal'
     }
 
-    // === Free-tier watermark overlay (last video step) ===
-    // Sits on top of everything (subtitles, overlay tracks) so users can't
-    // mask it with a covering clip. Pre-computed pixel sizes — `scale` filter
-    // doesn't see W/H, those are only defined inside `overlay`.
+    // === Corner branding watermark (last video step) ===
+    // Sits on top of everything (subtitles, overlay tracks) so it can't be
+    // masked by a covering clip. Drawn as text via drawtext using a Windows
+    // system font (platform is Windows-only). Bottom-right, semi-transparent
+    // with a soft shadow so it stays legible on any background.
     if (applyWatermark) {
-      const wmW    = Math.round(width  * 0.12)        // ~12% of frame width
-      const padPx  = Math.round(height * 0.025)       // ~2.5% of frame height padding
-      const wmPath = path.resolve(__dirname, '..', 'assets', 'watermark', '13soul-watermark.png')
+      const fontSize = Math.max(12, Math.round(height * 0.024))   // ~2.4% of frame height
+      const padPx    = Math.round(height * 0.025)                 // ~2.5% padding
       // Escape Windows drive colon the same way the subtitles block does.
       const escapeFilterPath = (p: string) => p.replace(/\\/g, '/').replace(/^([A-Za-z]):/, '$1\\:')
-      filterParts.push(`movie='${escapeFilterPath(wmPath)}'[wm0]`)
-      filterParts.push(`[wm0]scale=${wmW}:-1,format=rgba[wmark]`)
-      filterParts.push(`[${videoFinalLabel}][wmark]overlay=x=main_w-overlay_w-${padPx}:y=main_h-overlay_h-${padPx}[vwm]`)
+      const fontFile = escapeFilterPath('C:/Windows/Fonts/arial.ttf')
+      filterParts.push(
+        `[${videoFinalLabel}]drawtext=fontfile='${fontFile}':text='Isan 13soul':` +
+        `fontcolor=white@0.65:fontsize=${fontSize}:` +
+        `shadowcolor=black@0.5:shadowx=2:shadowy=2:` +
+        `x=w-tw-${padPx}:y=h-th-${padPx}[vwm]`
+      )
       videoFinalLabel = 'vwm'
     }
   }
