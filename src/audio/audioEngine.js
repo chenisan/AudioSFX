@@ -53,6 +53,11 @@ class AudioEngine {
     this.analyser = null
     this.limiter = null
     this._peakBuf = null
+    // Master limiter state (mirrors project.masterLimiter / export ffmpegBuilder
+    // buildMasterLimiterFilter). Default = on at -1 dB (legacy 防爆). Driven by
+    // setMasterLimiter(); _ensureContext reads these when first building the bus.
+    this._masterLimiterEnabled = true
+    this._masterCeilingDb = -1
 
     // Per-track meter buses: trackId → { gain, analyser, buf }. Each clip routes
     // its tail into its track's bus.gain (gain → analyser → masterGain), so the
@@ -108,15 +113,42 @@ class AudioEngine {
     // high ratio + hard knee + fast attack catches EQ-boost overs so the
     // hardware output stops hard-clipping ("爆爆" sound).
     this.limiter = this.ctx.createDynamicsCompressor()
-    this.limiter.threshold.value = -1.0
+    this.limiter.threshold.value = this._masterCeilingDb
     this.limiter.knee.value = 0
     this.limiter.ratio.value = 20
     this.limiter.attack.value = 0.003
     this.limiter.release.value = 0.1
 
     this.masterGain.connect(this.analyser)
-    this.analyser.connect(this.limiter)
-    this.limiter.connect(this.ctx.destination)
+    // analyser → [limiter →] destination, depending on whether the master
+    // limiter is enabled. Bypass routes analyser straight to destination.
+    if (this._masterLimiterEnabled) {
+      this.analyser.connect(this.limiter)
+      this.limiter.connect(this.ctx.destination)
+    } else {
+      this.analyser.connect(this.ctx.destination)
+    }
+  }
+
+  /** Enable/disable + retune the master-bus brickwall limiter, live. MIRROR:
+   *  server/core/ffmpegBuilder.ts buildMasterLimiterFilter (export side). The
+   *  meter/CLIP light tap PRE-limiter (masterGain → analyser), so toggling this
+   *  never changes what they report — only what actually reaches the output. */
+  setMasterLimiter(enabled, ceilingDb) {
+    this._masterLimiterEnabled = enabled !== false
+    if (typeof ceilingDb === 'number' && isFinite(ceilingDb)) this._masterCeilingDb = ceilingDb
+    if (!this.ctx) return  // not built yet — values apply on next _ensureContext
+    if (this.limiter) this.limiter.threshold.value = this._masterCeilingDb
+    // Re-wire the analyser tail. analyser's only output is this master tail, so
+    // disconnecting it is safe (masterGain → analyser stays intact).
+    try { this.analyser.disconnect() } catch {}
+    try { this.limiter.disconnect() } catch {}
+    if (this._masterLimiterEnabled) {
+      this.analyser.connect(this.limiter)
+      this.limiter.connect(this.ctx.destination)
+    } else {
+      this.analyser.connect(this.ctx.destination)
+    }
   }
 
   // Scan an analyser's time-domain frame for the linear peak → {peak, db, clip}.

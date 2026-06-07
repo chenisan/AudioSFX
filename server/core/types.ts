@@ -306,6 +306,13 @@ export interface Project {
   duration: number
   resolution?: [number, number]
   aspectRatio?: string   // '9:16' | '16:9' | '1:1' | '4:5' | '4:3'
+
+  // Master-bus brickwall limiter applied to the FINAL mix on export (and mirrored
+  // in the Web Audio preview: src/audio/audioEngine.js setMasterLimiter).
+  // Missing = { enabled: true, ceilingDb: -1 } (legacy default 防爆 behaviour).
+  // ceilingDb → ffmpeg alimiter limit = 10^(ceilingDb/20).
+  masterLimiter?: { enabled: boolean; ceilingDb: number }
+
   timeline: Timeline
   createdAt: string
   updatedAt: string

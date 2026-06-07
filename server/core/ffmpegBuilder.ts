@@ -80,6 +80,14 @@ function buildLimiterFilter(pr: any): string {
   return `alimiter=limit=${limit.toFixed(5)}:attack=5:release=${release}:level=disabled`
 }
 
+// Master-bus brickwall limiter on the final mix. ceilingDb → linear limit.
+// MIRROR: src/audio/audioEngine.js `setMasterLimiter` is the preview-side twin
+// (Web Audio DynamicsCompressor with threshold = ceilingDb). Keep in sync.
+function buildMasterLimiterFilter(ceilingDb: number): string {
+  const limit = clampRange(Math.pow(10, ceilingDb / 20), 0.0625, 1, 0.89125)
+  return `alimiter=limit=${limit.toFixed(5)}:attack=5:release=100:level=disabled`
+}
+
 /** Build the ordered ffmpeg filter strings for a track's plugin insert chain.
  * MIRROR: src/audio/audioEngine.js `_makePluginNodes` is the preview-side twin
  * (Web Audio biquad / DynamicsCompressor). Keep the two in sync. */
@@ -602,6 +610,15 @@ export async function buildFfmpegPlan(
         `${trackLabels.join('')}amix=inputs=${trackLabels.length}:normalize=0:dropout_transition=0[${mixLabel}]`
       )
       audioOutputLabel = mixLabel
+    }
+
+    // Optional master-bus limiter on the final mix. Default (missing field) = on
+    // at -1 dB, preserving the legacy 防爆 behaviour. User toggles via Main Out.
+    const ml = project.masterLimiter ?? { enabled: true, ceilingDb: -1 }
+    if (audioOutputLabel && ml.enabled) {
+      const limitedLabel = 'amaster'
+      filterParts.push(`[${audioOutputLabel}]${buildMasterLimiterFilter(ml.ceilingDb)}[${limitedLabel}]`)
+      audioOutputLabel = limitedLabel
     }
   }
 

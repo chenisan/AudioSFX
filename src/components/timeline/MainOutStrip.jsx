@@ -15,9 +15,27 @@ const dbToPct = (db) => {
 const volToDb = (v) => (v > 0.0001 ? 20 * Math.log10(v) : -Infinity)
 const fmtDb = (db) => (db <= MIN_DB || !isFinite(db) ? '-∞' : (db > 0 ? '+' : '') + db.toFixed(1))
 
+const DEFAULT_ML = { enabled: true, ceilingDb: -1 }
+
 export default function MainOutStrip() {
   const masterVolume = useProjectStore(s => s.masterVolume)
   const setMasterVolume = useProjectStore(s => s.setMasterVolume)
+  const masterLimiter = useProjectStore(s => s.project?.masterLimiter)
+  const updateProjectMeta = useProjectStore(s => s.updateProjectMeta)
+  const ml = masterLimiter ?? DEFAULT_ML
+
+  // Push the master limiter setting into the Web Audio preview whenever it
+  // changes (incl. project load). MIRROR of export ffmpegBuilder. The OUT
+  // meter/CLIP light tap pre-limiter, so this never alters what they show.
+  useEffect(() => {
+    audioEngine.setMasterLimiter(ml.enabled, ml.ceilingDb)
+  }, [ml.enabled, ml.ceilingDb])
+
+  const patchML = (patch) => {
+    const next = { enabled: ml.enabled, ceilingDb: ml.ceilingDb, ...patch }
+    updateProjectMeta({ masterLimiter: next })
+    audioEngine.setMasterLimiter(next.enabled, next.ceilingDb)
+  }
 
   const [db, setDb] = useState(-Infinity)
   const [clip, setClip] = useState(false)
@@ -88,6 +106,28 @@ export default function MainOutStrip() {
             clip ? 'bg-[#ef4444] text-white' : 'bg-[#1a1a1a] text-[#444] border border-[#2a2a2a]'
           }`}
         >CLIP</span>
+      </div>
+
+      {/* Master limiter (防爆母帶) — affects BOTH preview and export. */}
+      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[#000]/40">
+        <button
+          onClick={() => patchML({ enabled: !ml.enabled })}
+          className={`px-1.5 h-5 rounded text-[8px] font-semibold tracking-wider shrink-0 transition-colors ${
+            ml.enabled ? 'bg-[#6d5efc] text-white shadow-[0_0_6px_rgba(109,94,252,0.4)]' : 'bg-[#1a1a1a] text-[#666] border border-[#2a2a2a]'
+          }`}
+          title={ml.enabled ? '匯出母帶 limiter：開（點擊關閉）' : '匯出母帶 limiter：關（點擊開啟）'}
+        >LIMIT</button>
+        <input
+          type="range" min={-3} max={0} step={0.1} value={ml.ceilingDb}
+          disabled={!ml.enabled}
+          onChange={e => patchML({ ceilingDb: +e.target.value })}
+          onDoubleClick={() => patchML({ ceilingDb: -1 })}
+          className="flex-1 h-1 accent-[#6d5efc] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+          title="ceiling（上限，雙擊回 −1 dB）"
+        />
+        <span className={`font-mono text-[9px] tabular-nums w-10 text-right ${ml.enabled ? 'text-[#999]' : 'text-[#555]'}`}>
+          {ml.ceilingDb > 0 ? '+' : ''}{ml.ceilingDb.toFixed(1)}<span className="text-[#666] ml-0.5">dB</span>
+        </span>
       </div>
     </div>
   )
