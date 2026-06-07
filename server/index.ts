@@ -3,6 +3,14 @@ import express from 'express'
 import cors from 'cors'
 import * as path from 'path'
 import * as fs from 'fs'
+import ffmpeg from 'fluent-ffmpeg'
+
+// Point fluent-ffmpeg at explicit binaries when provided (Electron packaged
+// builds set FFMPEG_PATH / FFPROBE_PATH to the bundled exes). Without this,
+// fluent-ffmpeg looks for `ffmpeg`/`ffprobe` on the system PATH — fine in dev,
+// but absent in a packaged install → render/probe would fail.
+if (process.env.FFMPEG_PATH) ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH)
+if (process.env.FFPROBE_PATH) ffmpeg.setFfprobePath(process.env.FFPROBE_PATH)
 
 import projectsRouter from './routes/projects'
 import assetsRouter from './routes/assets'
