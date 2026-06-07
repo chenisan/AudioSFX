@@ -44,6 +44,7 @@ AudioSFX 在你自己的電腦（本地 GPU）跑兩個 AI 模型生成音效，
 - 🖥 **浮動預覽窗** — 右下可拖／可調大小
 - ⚡ **ffmpeg 渲染** — NVENC GPU 自動加速，匯出 MP4 / MOV / WebM / WAV
 - 📦 **桌面安裝版** — Electron 打包，內嵌後端 + ffmpeg，動態 port
+- 🧠 **AI 可控（MCP）** — 內建 MCP server，讓 **Claude / Codex 直接驅動編輯器**（建專案／生成音效／排時間軸）
 
 ### 安裝與啟動
 
@@ -64,6 +65,12 @@ pwsh engines/start-mmaudio.ps1   # :6303  MMAudio
 > 沒啟動引擎也能剪輯／匯出，只是不能生成音效。
 
 **需求**：Node.js 20+、Windows、NVIDIA RTX GPU（音效生成）、ffmpeg。
+
+### AI 控制（MCP）
+
+內建 MCP server（`server/mcp-server.mts`）讓 **Claude / Codex 控制正在跑的編輯器**（建專案／生成音效／排時間軸）。在 repo 開 Claude Code 會偵測 `.mcp.json` 並詢問啟用 `audiosfx`；需後端在跑（`npm run dev`）。詳見 [Wiki](https://github.com/chenisan/AudioSFX/wiki)。
+
+> 例：對 Claude 說「用 audiosfx 建 30 秒專案，生成 glass shatter 音效，加到音軌第 2 秒，存檔」。
 
 ### 使用教學
 
@@ -122,6 +129,7 @@ AudioSFX runs two AI models on your own machine (local GPU) to generate SFX, let
 - 🖥 **Floating preview** — bottom-right, draggable & resizable
 - ⚡ **ffmpeg rendering** — automatic NVENC GPU acceleration; export MP4 / MOV / WebM / WAV
 - 📦 **Desktop build** — Electron-packaged with an embedded backend + ffmpeg, dynamic port
+- 🧠 **AI-controllable (MCP)** — a built-in MCP server lets **Claude / Codex drive the editor** (create projects, generate SFX, arrange the timeline)
 
 ### Install & run
 
@@ -142,6 +150,10 @@ pwsh engines/start-mmaudio.ps1   # :6303  MMAudio
 > Editing/exporting works without the engines — you just can't generate SFX.
 
 **Requirements**: Node.js 20+, Windows, NVIDIA RTX GPU (for SFX generation), ffmpeg.
+
+### AI control (MCP)
+
+A built-in MCP server (`server/mcp-server.mts`) lets **Claude / Codex drive the running editor** (create projects, generate SFX, arrange the timeline). Opening the repo in Claude Code auto-detects `.mcp.json`; the backend must be running (`npm run dev`). See the [Wiki](https://github.com/chenisan/AudioSFX/wiki).
 
 ### Usage
 
