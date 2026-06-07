@@ -4,7 +4,7 @@ import { useProject } from './hooks/useProject'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import Header from './components/layout/Header'
 import Resizer from './components/layout/Resizer'
-import PreviewPanel from './components/preview/PreviewPanel'
+import FloatingPreview from './components/preview/FloatingPreview'
 import AssetPanel from './components/assets/AssetPanel'
 import SfxPanel from './components/audio/SfxPanel'
 import TrackEffectsTab from './components/timeline/TrackEffectsTab'
@@ -153,23 +153,18 @@ export default function App() {
   }
   const projectId = useProjectStore(s => s.project?.id)
   const bumpAssetVersion = useProjectStore(s => s.bumpAssetVersion)
+  const previewOpen = useProjectStore(s => s.previewOpen)
   const { uploadAsset } = useProject()
   useKeyboardShortcuts()
 
   // ── Resizable layout ────────────────────────────────────────────────────────
+  // Left column = LeftPanel (full height). Video preview is now a floating
+  // window (FloatingPreview), no longer docked in the left column.
   const containerRef = useRef(null)
   const [leftColWidth, setLeftColWidth] = useState(360)   // left column width (px)
-  const [leftTopFrac, setLeftTopFrac] = useState(0.45)    // panel vs preview split in left column
 
   const handleLeftColResize = useCallback((_, clientX) => {
     setLeftColWidth(Math.max(260, Math.min(600, clientX)))
-  }, [])
-
-  const handleLeftTopResize = useCallback((_, clientY) => {
-    const c = containerRef.current
-    if (!c) return
-    const rect = c.getBoundingClientRect()
-    setLeftTopFrac(Math.max(0.2, Math.min(0.8, (clientY - rect.top) / rect.height)))
   }, [])
 
   // Global OS file drop
@@ -215,15 +210,9 @@ export default function App() {
       />
 
       <div ref={containerRef} className="flex-1 flex overflow-hidden">
-        {/* Left column: assets/SFX (top) + video preview (bottom-left) */}
+        {/* Left column: assets / SFX / effects (full height). Preview floats. */}
         <div className="flex flex-col overflow-hidden shrink-0" style={{ width: leftColWidth }}>
-          <div className="overflow-hidden" style={{ height: `${leftTopFrac * 100}%` }}>
-            <LeftPanel />
-          </div>
-          <Resizer direction="vertical" onResize={handleLeftTopResize} />
-          <div className="flex-1 overflow-hidden bg-[#0d0d0d] min-h-0">
-            <PreviewPanel />
-          </div>
+          <LeftPanel />
         </div>
 
         <Resizer direction="horizontal" onResize={handleLeftColResize} />
@@ -236,6 +225,9 @@ export default function App() {
 
       {showProjectModal && <ProjectModal onClose={() => setShowProjectModal(false)} />}
       {settingsOpen && <SettingsModal defaultTab={settingsDefaultTab} onClose={() => setSettingsOpen(false)} />}
+
+      {/* Floating video preview (toggle from Header「預覽」). */}
+      {previewOpen && <FloatingPreview />}
 
       <Toast />
       <AudioGenIndicator />

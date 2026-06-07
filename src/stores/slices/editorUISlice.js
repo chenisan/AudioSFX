@@ -42,6 +42,19 @@ export function createEditorUISlice(set, get) {
         return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 1
       } catch { return 1 }
     })(),
+    // Floating video-preview window. UI-only, per-machine (localStorage), never
+    // in project.yaml / undo. previewOpen toggles the window; previewRect is its
+    // {x,y,w,h} (null = compute bottom-right default on first mount).
+    previewOpen: (() => {
+      try { return localStorage.getItem('13soul.preview.open') !== '0' } catch { return true }
+    })(),
+    previewRect: (() => {
+      try {
+        const r = JSON.parse(localStorage.getItem('13soul.preview.rect') || 'null')
+        if (r && ['x', 'y', 'w', 'h'].every(k => Number.isFinite(r[k]))) return r
+      } catch {}
+      return null
+    })(),
     // Persistent indicator for long audio generations (MMAudio/Woosh V2A) that
     // have no sub-step progress. null = idle; otherwise { label, startedAt }.
     audioGen: null,
@@ -229,6 +242,23 @@ export function createEditorUISlice(set, get) {
       const next = Math.max(0, Math.min(1, typeof v === 'function' ? v(get().masterVolume) : v))
       set({ masterVolume: next })
       try { localStorage.setItem('13soul.masterVolume', String(next)) } catch {}
+    },
+
+    // ── Floating preview window ───────────────────────
+
+    /** Show/hide the floating preview. Accepts a value or updater fn. Persisted. */
+    setPreviewOpen(v) {
+      const next = typeof v === 'function' ? v(get().previewOpen) : !!v
+      set({ previewOpen: next })
+      try { localStorage.setItem('13soul.preview.open', next ? '1' : '0') } catch {}
+    },
+    togglePreviewOpen() {
+      get().setPreviewOpen(!get().previewOpen)
+    },
+    /** Persist the floating preview's {x,y,w,h}. Called on drag/resize end. */
+    setPreviewRect(rect) {
+      set({ previewRect: rect })
+      try { localStorage.setItem('13soul.preview.rect', JSON.stringify(rect)) } catch {}
     },
 
     // ── Derived helpers ──────────────────────────────

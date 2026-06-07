@@ -12,6 +12,8 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
   const projectId = useProjectStore(s => s.project?.id)
   const projectName = useProjectStore(s => s.project?.name)
   const isDirty = useProjectStore(s => s.isDirty)
+  const previewOpen = useProjectStore(s => s.previewOpen)
+  const togglePreviewOpen = useProjectStore(s => s.togglePreviewOpen)
   const { saveProject } = useProject()
   const { rendering, progress, messages, outputUrl, error, render, reset } = useRender()
   const [saving, setSaving] = useState(false)
@@ -81,6 +83,19 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
           className="text-sm px-4 py-1 bg-[#6d5efc] hover:bg-[#5848e0] disabled:bg-[#2e2a5c] disabled:cursor-not-allowed text-white rounded font-medium transition-colors"
         >
           {rendering ? '渲染中...' : saving ? '儲存中...' : '匯出'}
+        </button>
+
+        {/* Floating preview toggle */}
+        <button
+          onClick={togglePreviewOpen}
+          className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
+            previewOpen ? 'text-[#6d5efc]' : 'text-[#666] hover:text-[#aaa]'
+          }`}
+          title={previewOpen ? '關閉浮動預覽' : '開啟浮動預覽'}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
+          </svg>
         </button>
 
         {/* Inference service control / monitor */}
