@@ -1,6 +1,10 @@
 node_modules/
 dist/
 
+# Local Claude Code MCP config + build/run logs (not part of the app)
+.mcp.json
+*.log
+
 # AI engines: MMAudio / Woosh are full upstream OSS clones (each has its own
 # embedded .git, GB-scale weights, venvs). They're reproducible via the PoC
 # clone steps in DEVELOPMENT_PLAN §2, so we DON'T vendor the upstream trees —
@@ -86,7 +90,6 @@ tts-server/__pycache__/
 /docs/
 /tts-server/
 /ARCHITECTURE.md
-/README.md
 /CLAUDE.md
 /handoff.md
 /13soul-video-engine-SPEC-v2.md
