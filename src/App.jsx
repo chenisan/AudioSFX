@@ -13,6 +13,7 @@ import AudioGenIndicator from './components/audio/AudioGenIndicator'
 import Timeline from './components/timeline/Timeline'
 import Toast from './components/common/Toast'
 import SettingsModal from './components/layout/SettingsModal'
+import AboutPanel from './components/common/AboutPanel'
 
 // ── Project Modal ──────────────────────────────────────────────────────────────
 function ProjectModal({ onClose }) {
@@ -139,14 +140,34 @@ function LeftPanel() {
   )
 }
 
+// ── Startup About window — shown once on app open (the brand poster + intro) ────
+function StartupAboutModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/85 flex items-center justify-center p-4">
+      <div className="bg-[#1a1a1a] border border-[#333] rounded-xl w-[460px] max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
+        <div className="overflow-y-auto p-5">
+          <AboutPanel />
+        </div>
+        <div className="p-4 border-t border-[#2a2a2a] flex justify-end shrink-0">
+          <button
+            onClick={onClose}
+            className="px-6 py-1.5 text-white text-sm rounded font-medium bg-[#6d5efc] hover:bg-[#5848e0]"
+          >進入 AudioSFX</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Root App ───────────────────────────────────────────────────────────────────
-// Layout: left column (assets/SFX on top · video preview bottom-left) | right
-// column (full-height timeline). No properties panel.
+// Layout: left column (panels) | right column (full-height timeline). Video
+// preview is a floating window. No properties panel.
 export default function App() {
   const [showProjectModal, setShowProjectModal] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsDefaultTab, setSettingsDefaultTab] = useState('performance')
   const [globalDropping, setGlobalDropping] = useState(false)
+  const [showStartupAbout, setShowStartupAbout] = useState(true)   // 開啟時先顯示關於我
 
   const openSettings = (tab = 'performance') => {
     setSettingsDefaultTab(tab)
@@ -246,6 +267,9 @@ export default function App() {
           <SfxPanel />
         </FloatingWindow>
       )}
+
+      {/* Startup About — first thing shown when the app opens */}
+      {showStartupAbout && <StartupAboutModal onClose={() => setShowStartupAbout(false)} />}
 
       <Toast />
       <AudioGenIndicator />
