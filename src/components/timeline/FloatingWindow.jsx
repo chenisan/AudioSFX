@@ -1,9 +1,15 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 
-// Generic draggable floating window. Title bar drags; X closes. Content-sized
-// (pass a width; height follows children, capped at 70vh with scroll). Position
-// is local/session state — dragged during use, not persisted. Used by the track
-// FX editor to pop EQ / dynamics panels out of the inline insert list.
+// Generic draggable floating window. Title bar drags; X closes.
+//
+// Sizing:
+//   - default: content-sized (pass `width`; height follows children, capped at
+//     70vh with scroll). Good for compact param panels (EQ / dynamics).
+//   - `height` set: fixed body height; children get a full-height box (no inner
+//     padding) so a `h-full` flex child like SfxPanel can fill + scroll itself.
+//
+// Position: local/session state by default. Pass `storageKey` to persist {x,y}
+// to localStorage (e.g. the Header-toggled SFX window remembers where you put it).
 
 const MARGIN = 8
 
@@ -15,12 +21,20 @@ function clampPos(x, y, w, h) {
   }
 }
 
-export default function FloatingWindow({ title, onClose, children, width = 320, initialX, initialY }) {
+export default function FloatingWindow({ title, onClose, children, width = 320, height, initialX, initialY, storageKey }) {
   const ref = useRef(null)
-  const [pos, setPos] = useState(() => ({
-    x: initialX ?? Math.max(MARGIN, (window.innerWidth - width) / 2),
-    y: initialY ?? 120,
-  }))
+  const [pos, setPos] = useState(() => {
+    if (storageKey) {
+      try {
+        const s = JSON.parse(localStorage.getItem(storageKey + '.pos') || 'null')
+        if (s && Number.isFinite(s.x) && Number.isFinite(s.y)) return s
+      } catch {}
+    }
+    return {
+      x: initialX ?? Math.max(MARGIN, (window.innerWidth - width) / 2),
+      y: initialY ?? 120,
+    }
+  })
   const dragRef = useRef(null)  // { sx, sy, ox, oy }
 
   const onMove = useCallback((e) => {
@@ -31,10 +45,14 @@ export default function FloatingWindow({ title, onClose, children, width = 320, 
   }, [width])
 
   const onUp = useCallback(() => {
+    if (!dragRef.current) return
     dragRef.current = null
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
-  }, [onMove])
+    if (storageKey) {
+      setPos(p => { try { localStorage.setItem(storageKey + '.pos', JSON.stringify(p)) } catch {} ; return p })
+    }
+  }, [onMove, storageKey])
 
   const onDown = (e) => {
     e.preventDefault()
@@ -43,13 +61,16 @@ export default function FloatingWindow({ title, onClose, children, width = 320, 
     window.addEventListener('pointerup', onUp)
   }
 
-  // Clamp once after first layout (in case the default/initial pos is partly
-  // off-screen), and clean up listeners on unmount.
+  // Clamp once after first layout (initial pos may be partly off-screen), and
+  // detach listeners on unmount (without persisting — persist only on drag end).
   useEffect(() => {
     const h = ref.current?.offsetHeight ?? 0
     setPos(p => clampPos(p.x, p.y, width, h))
-    return onUp
-  }, [width, onUp])
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [width, onMove, onUp])
 
   return (
     <div
@@ -69,9 +90,11 @@ export default function FloatingWindow({ title, onClose, children, width = 320, 
           title="關閉"
         >×</button>
       </div>
-      <div className="p-2 overflow-y-auto max-h-[70vh]">
-        {children}
-      </div>
+      {height != null ? (
+        <div className="overflow-hidden rounded-b-lg" style={{ height }}>{children}</div>
+      ) : (
+        <div className="p-2 overflow-y-auto max-h-[70vh]">{children}</div>
+      )}
     </div>
   )
 }

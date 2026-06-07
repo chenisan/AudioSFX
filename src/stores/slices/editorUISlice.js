@@ -55,6 +55,12 @@ export function createEditorUISlice(set, get) {
       } catch {}
       return null
     })(),
+    // Floating SFX-generation window (text→SFX). Header-toggled, like the
+    // preview. Open state persisted; window position handled by FloatingWindow's
+    // storageKey. Default closed.
+    sfxOpen: (() => {
+      try { return localStorage.getItem('13soul.sfx.open') === '1' } catch { return false }
+    })(),
     // Persistent indicator for long audio generations (MMAudio/Woosh V2A) that
     // have no sub-step progress. null = idle; otherwise { label, startedAt }.
     audioGen: null,
@@ -259,6 +265,16 @@ export function createEditorUISlice(set, get) {
     setPreviewRect(rect) {
       set({ previewRect: rect })
       try { localStorage.setItem('13soul.preview.rect', JSON.stringify(rect)) } catch {}
+    },
+
+    /** Show/hide the floating SFX-generation window. Accepts a value or fn. */
+    setSfxOpen(v) {
+      const next = typeof v === 'function' ? v(get().sfxOpen) : !!v
+      set({ sfxOpen: next })
+      try { localStorage.setItem('13soul.sfx.open', next ? '1' : '0') } catch {}
+    },
+    toggleSfxOpen() {
+      get().setSfxOpen(!get().sfxOpen)
     },
 
     // ── Derived helpers ──────────────────────────────

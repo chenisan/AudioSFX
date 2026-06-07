@@ -5,6 +5,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import Header from './components/layout/Header'
 import Resizer from './components/layout/Resizer'
 import FloatingPreview from './components/preview/FloatingPreview'
+import FloatingWindow from './components/timeline/FloatingWindow'
 import AssetPanel from './components/assets/AssetPanel'
 import SfxPanel from './components/audio/SfxPanel'
 import TrackEffectsTab from './components/timeline/TrackEffectsTab'
@@ -114,7 +115,7 @@ function ProjectModal({ onClose }) {
 }
 
 // ── Left panel — asset library + SFX generation (tabbed) ───────────────────────
-const LEFT_TABS = [['assets', '素材'], ['sfx', '音效'], ['effects', '效果']]
+const LEFT_TABS = [['assets', '素材'], ['effects', '效果']]
 
 function LeftPanel() {
   const [tab, setTab] = useState('assets')
@@ -132,7 +133,7 @@ function LeftPanel() {
         ))}
       </div>
       <div className="flex-1 overflow-hidden">
-        {tab === 'assets' ? <AssetPanel /> : tab === 'sfx' ? <SfxPanel /> : <TrackEffectsTab />}
+        {tab === 'assets' ? <AssetPanel /> : <TrackEffectsTab />}
       </div>
     </div>
   )
@@ -154,6 +155,8 @@ export default function App() {
   const projectId = useProjectStore(s => s.project?.id)
   const bumpAssetVersion = useProjectStore(s => s.bumpAssetVersion)
   const previewOpen = useProjectStore(s => s.previewOpen)
+  const sfxOpen = useProjectStore(s => s.sfxOpen)
+  const setSfxOpen = useProjectStore(s => s.setSfxOpen)
   const { uploadAsset } = useProject()
   useKeyboardShortcuts()
 
@@ -228,6 +231,21 @@ export default function App() {
 
       {/* Floating video preview (toggle from Header「預覽」). */}
       {previewOpen && <FloatingPreview />}
+
+      {/* Floating SFX-generation window (toggle from Header「音效」). */}
+      {sfxOpen && (
+        <FloatingWindow
+          title="音效生成"
+          onClose={() => setSfxOpen(false)}
+          width={340}
+          height={Math.min(560, window.innerHeight - 110)}
+          storageKey="13soul.sfx"
+          initialX={420}
+          initialY={90}
+        >
+          <SfxPanel />
+        </FloatingWindow>
+      )}
 
       <Toast />
       <AudioGenIndicator />

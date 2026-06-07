@@ -5,6 +5,16 @@ import { useRender } from '../../hooks/useRender'
 import RenderProgress from '../render/RenderProgress'
 import EngineControls from '../services/EngineControls'
 
+// Spinning loader for icon buttons in a busy state (saving / rendering).
+function Spinner() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="animate-spin">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="2" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export default function Header({ onOpenProjectModal, onOpenSettings }) {
   // Narrowed — Header only needs id (truthy gating) + name (display); the
   // full subscription was forcing a re-render of every button on every clip
@@ -14,6 +24,8 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
   const isDirty = useProjectStore(s => s.isDirty)
   const previewOpen = useProjectStore(s => s.previewOpen)
   const togglePreviewOpen = useProjectStore(s => s.togglePreviewOpen)
+  const sfxOpen = useProjectStore(s => s.sfxOpen)
+  const toggleSfxOpen = useProjectStore(s => s.toggleSfxOpen)
   const { saveProject } = useProject()
   const { rendering, progress, messages, outputUrl, error, render, reset } = useRender()
   const [saving, setSaving] = useState(false)
@@ -70,9 +82,14 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
         <button
           onClick={handleSave}
           disabled={!projectId || saving || !isDirty}
-          className="text-sm px-3 py-1 bg-[#1a1a1a] hover:bg-[#252525] disabled:opacity-40 border border-[#333] text-[#aaa] rounded transition-colors"
+          className="w-8 h-8 flex items-center justify-center rounded text-[#aaa] hover:text-white hover:bg-[#1f1f1f] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#aaa] transition-colors"
+          title={saving ? '儲存中…' : isDirty ? '儲存 (Ctrl+S)' : '已儲存'}
         >
-          {saving ? '儲存中...' : '儲存'}
+          {saving ? <Spinner /> : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
+            </svg>
+          )}
         </button>
 
         {/* Export — auto-saves first if dirty so the render uses the latest state */}
@@ -80,9 +97,14 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
           onClick={handleOpenExport}
           disabled={!projectId || rendering || saving}
           data-testid="header-export"
-          className="text-sm px-4 py-1 bg-[#6d5efc] hover:bg-[#5848e0] disabled:bg-[#2e2a5c] disabled:cursor-not-allowed text-white rounded font-medium transition-colors"
+          className="w-8 h-8 flex items-center justify-center rounded text-[#6d5efc] hover:text-[#8b7dff] hover:bg-[#1f1f1f] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#6d5efc] disabled:cursor-not-allowed transition-colors"
+          title={rendering ? '渲染中…' : saving ? '儲存中…' : '匯出'}
         >
-          {rendering ? '渲染中...' : saving ? '儲存中...' : '匯出'}
+          {(rendering || saving) ? <Spinner /> : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          )}
         </button>
 
         {/* Floating preview toggle */}
@@ -95,6 +117,19 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
+          </svg>
+        </button>
+
+        {/* Floating SFX-generation toggle */}
+        <button
+          onClick={toggleSfxOpen}
+          className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
+            sfxOpen ? 'text-[#6d5efc]' : 'text-[#666] hover:text-[#aaa]'
+          }`}
+          title={sfxOpen ? '關閉音效生成' : '開啟音效生成'}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 10v4M7 6v12M11 3v18M15 7v10M19 10v4" />
           </svg>
         </button>
 
