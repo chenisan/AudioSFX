@@ -3,6 +3,7 @@ import { useProjectStore } from '../../stores/projectStore'
 import { getPlugins, makePlugin, PLUGIN_LABELS } from '../../utils/trackPlugins'
 import TrackEqPanel from './TrackEqPanel'
 import TrackDynamicsPanel from './TrackDynamicsPanel'
+import FloatingWindow from './FloatingWindow'
 
 // Track effect-chain editor (rendered inline in the left column "效果" tab).
 // Owns the track.plugins array and ALL persistence; child param panels
@@ -14,7 +15,7 @@ import TrackDynamicsPanel from './TrackDynamicsPanel'
 export default function TrackFxEditor({ track }) {
   const setTrackPlugins = useProjectStore(s => s.setTrackPlugins)
   const setTrackPluginsLive = useProjectStore(s => s.setTrackPluginsLive)
-  const [expandedId, setExpandedId] = useState(null)
+  const [editingId, setEditingId] = useState(null)   // plugin whose floating editor is open (one at a time)
   const [showAdd, setShowAdd] = useState(false)
   const timerRef = useRef(null)
 
@@ -39,7 +40,7 @@ export default function TrackFxEditor({ track }) {
   const toggle = (id) => commit(plugins.map(p => (p.id === id ? { ...p, enabled: !p.enabled } : p)))
   const remove = (id) => {
     commit(plugins.filter(p => p.id !== id))
-    if (expandedId === id) setExpandedId(null)
+    if (editingId === id) setEditingId(null)
   }
   const move = (id, dir) => {
     const i = plugins.findIndex(p => p.id === id)
@@ -53,7 +54,7 @@ export default function TrackFxEditor({ track }) {
     const plugin = makePlugin(type)
     if (!plugin) return
     commit([...plugins, plugin])
-    setExpandedId(plugin.id)
+    setEditingId(plugin.id)
     setShowAdd(false)
   }
 
@@ -65,8 +66,8 @@ export default function TrackFxEditor({ track }) {
 
       <div className="flex flex-col gap-1">
         {plugins.map((p, i) => (
-          <div key={p.id} className="rounded border border-[#3a3a3a] bg-[#222]">
-            {/* Row: enable · name(expand) · reorder · remove */}
+          <div key={p.id} className={`rounded border bg-[#222] ${editingId === p.id ? 'border-[#6d5efc]' : 'border-[#3a3a3a]'}`}>
+            {/* Row: enable · name(opens floating editor) · reorder · remove */}
             <div className="flex items-center gap-1 px-1.5 py-1">
               <input
                 type="checkbox"
@@ -76,8 +77,9 @@ export default function TrackFxEditor({ track }) {
                 title={p.enabled ? '停用' : '啟用'}
               />
               <button
-                onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
-                className="flex-1 text-left text-[11px] text-[#ccc] hover:text-white"
+                onClick={() => setEditingId(editingId === p.id ? null : p.id)}
+                className={`flex-1 text-left text-[11px] hover:text-white ${editingId === p.id ? 'text-[#6d5efc]' : 'text-[#ccc]'}`}
+                title="點擊開啟參數視窗"
               >
                 {PLUGIN_LABELS[p.type] ?? p.type}
                 {!p.enabled && <span className="text-[#555] ml-1">(停用)</span>}
@@ -89,24 +91,6 @@ export default function TrackFxEditor({ track }) {
               <button onClick={() => remove(p.id)}
                 className="text-[11px] text-[#666] hover:text-red-400 px-0.5" title="移除">✕</button>
             </div>
-
-            {/* Expanded params */}
-            {expandedId === p.id && (
-              <div className="px-2 pb-2 border-t border-[#3a3a3a]">
-                {p.type === 'eq' ? (
-                  <TrackEqPanel
-                    bands={p.params?.bands ?? []}
-                    onChange={(bands, persist) => setParams(p.id, { ...p.params, bands }, persist)}
-                  />
-                ) : (
-                  <TrackDynamicsPanel
-                    type={p.type}
-                    params={p.params ?? {}}
-                    onChange={(params, persist) => setParams(p.id, params, persist)}
-                  />
-                )}
-              </div>
-            )}
           </div>
         ))}
       </div>
@@ -130,6 +114,35 @@ export default function TrackFxEditor({ track }) {
           </div>
         )}
       </div>
+
+      {/* Floating param editor — one at a time. `editing` is recomputed from the
+          live plugins each render, so the panel always sees fresh params. */}
+      {(() => {
+        const editing = plugins.find(p => p.id === editingId)
+        if (!editing) return null
+        return (
+          <FloatingWindow
+            title={`${track.name} · ${PLUGIN_LABELS[editing.type] ?? editing.type}`}
+            onClose={() => setEditingId(null)}
+            width={editing.type === 'eq' ? 340 : 300}
+            initialX={380}
+            initialY={130}
+          >
+            {editing.type === 'eq' ? (
+              <TrackEqPanel
+                bands={editing.params?.bands ?? []}
+                onChange={(bands, persist) => setParams(editing.id, { ...editing.params, bands }, persist)}
+              />
+            ) : (
+              <TrackDynamicsPanel
+                type={editing.type}
+                params={editing.params ?? {}}
+                onChange={(params, persist) => setParams(editing.id, params, persist)}
+              />
+            )}
+          </FloatingWindow>
+        )
+      })()}
     </div>
   )
 }
