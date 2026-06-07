@@ -72,6 +72,10 @@
       {
         "from": "node_modules/ffprobe-static/bin/win32/x64/ffprobe.exe",
         "to": "ffprobe.exe"
+      },
+      {
+        "from": "NOTICE.md",
+        "to": "NOTICE.md"
       }
     ],
     "asarUnpack": [

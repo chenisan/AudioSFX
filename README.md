@@ -95,6 +95,7 @@ pwsh engines/start-mmaudio.ps1   # :6303  MMAudio
 
 **PolyForm Noncommercial License 1.0.0** — 僅限**非商業**用途。詳見 [LICENSE](./LICENSE)。
 依賴的 MMAudio / Sony Woosh 權重亦為 CC BY-NC。
+本工具打包並以獨立執行檔呼叫 **FFmpeg（GPLv3）**；第三方授權與來源見 [NOTICE.md](./NOTICE.md)。
 
 ---
 
@@ -172,6 +173,7 @@ pwsh engines/start-mmaudio.ps1   # :6303  MMAudio
 
 **PolyForm Noncommercial License 1.0.0** — **non-commercial** use only. See [LICENSE](./LICENSE).
 The MMAudio / Sony Woosh weights it relies on are likewise CC BY-NC.
+This tool bundles and invokes **FFmpeg (GPLv3)** as a separate executable; third-party licenses and sources are listed in [NOTICE.md](./NOTICE.md).
 
 ---
 
