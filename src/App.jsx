@@ -206,8 +206,17 @@ export default function App() {
   const previewOpen = useProjectStore(s => s.previewOpen)
   const sfxOpen = useProjectStore(s => s.sfxOpen)
   const setSfxOpen = useProjectStore(s => s.setSfxOpen)
+  const isPlaying = useProjectStore(s => s.isPlaying)
   const { uploadAsset } = useProject()
   useKeyboardShortcuts()
+
+  // Auto-open the floating preview when playback starts (spacebar / play button)
+  // so the video is always visible when you hit play.
+  useEffect(() => {
+    if (isPlaying && !useProjectStore.getState().previewOpen) {
+      useProjectStore.getState().setPreviewOpen(true)
+    }
+  }, [isPlaying])
 
   // ── Resizable layout ────────────────────────────────────────────────────────
   // Left column = LeftPanel (full height). Video preview is now a floating
