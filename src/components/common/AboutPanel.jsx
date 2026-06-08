@@ -21,7 +21,7 @@ const COPY = {
     credit: '設計製作 · Isan（13soul）',
     role: '全端設計工程師 · 影像及音樂創作人',
     note: 'MMAudio／Woosh 權重為 CC BY-NC，本工具維持非商業定位。歡迎追蹤以下連結。',
-    legal: '內含 FFmpeg（GPLv3，以獨立執行檔呼叫）· 第三方授權見 GitHub NOTICE.md',
+    legal: '內含 FFmpeg（GPLv3，以獨立執行檔呼叫）· 內建音效庫 Kenney.nl（CC0）· 第三方授權見 GitHub NOTICE.md',
     links: '連結',
   },
   en: {
@@ -30,7 +30,7 @@ const COPY = {
     credit: 'Designed & built by Isan (13soul)',
     role: 'Full-stack design engineer · video & music creator',
     note: 'MMAudio / Woosh weights are CC BY-NC; this tool stays non-commercial. Follow the links below.',
-    legal: 'Includes FFmpeg (GPLv3, invoked as a separate executable) · third-party licenses in NOTICE.md on GitHub',
+    legal: 'Includes FFmpeg (GPLv3, invoked as a separate executable) · bundled SFX library by Kenney.nl (CC0) · third-party licenses in NOTICE.md on GitHub',
     links: 'Links',
   },
 }

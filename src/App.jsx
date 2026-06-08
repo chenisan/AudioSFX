@@ -7,7 +7,7 @@ import Resizer from './components/layout/Resizer'
 import FloatingPreview from './components/preview/FloatingPreview'
 import FloatingWindow from './components/timeline/FloatingWindow'
 import AssetPanel from './components/assets/AssetPanel'
-import SfxPanel from './components/audio/SfxPanel'
+import SfxWindow from './components/audio/SfxWindow'
 import TrackEffectsTab from './components/timeline/TrackEffectsTab'
 import AudioGenIndicator from './components/audio/AudioGenIndicator'
 import Timeline from './components/timeline/Timeline'
@@ -293,15 +293,15 @@ export default function App() {
       {/* Floating SFX-generation window (toggle from Header「音效」). */}
       {sfxOpen && (
         <FloatingWindow
-          title="音效生成"
+          title="音效"
           onClose={() => setSfxOpen(false)}
-          width={340}
-          height={Math.min(560, window.innerHeight - 110)}
+          width={440}
+          height={Math.min(580, window.innerHeight - 110)}
           storageKey="13soul.sfx"
           initialX={420}
           initialY={90}
         >
-          <SfxPanel />
+          <SfxWindow />
         </FloatingWindow>
       )}
 

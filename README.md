@@ -39,6 +39,7 @@ AudioSFX 在你自己的電腦（本地 GPU）跑兩個 AI 模型生成音效，
 ### 特色
 
 - 🎬 **9:16 直式時間軸編輯器** — 影片／音訊／文字多軌，拖移・裁切・分割
+- 📚 **內建 CC0 音效庫** — 400+ 即用音效（Kenney.nl），**免引擎、即點即用**：撞擊／腳步／介面／電子／科技／物件
 - 🤖 **三種音效生成入口** — 文字→SFX、影片→V2A 同步音、音軌指定位置生成
 - 🎚 **DAW 風格混音** — 每軌 EQ / 壓縮器 / 限幅器（可拖曳浮動視窗）+ 母帶防爆 limiter
 - 🖥 **浮動預覽窗** — 右下可拖／可調大小
@@ -76,8 +77,9 @@ pwsh engines/start-mmaudio.ps1   # :6303  MMAudio
 
 1. **建專案 + 匯入** — 專案 ▾ → 新建；把影片／音檔拖進視窗。
 2. **時間軸剪輯** — 拖移・裁切・分割；軌道可改名／鎖定／靜音。選中軌靛紫、靜音軌琥珀。
-3. **生成音效**（三種入口）：
-   - **文字 → SFX**：頂部〰「音效」浮窗 → 英文 prompt（如 `glass shatter`）→ 生成。
+3. **加音效**：頂部〰「音效」浮窗，兩個分頁——
+   - **音效庫**（最快，免引擎）：選分類／搜尋 → ▶ 試聽 → 「＋軌」加到時間軸，或「素材」只匯入。
+   - **AI 生成 — 文字 → SFX**：英文 prompt（如 `glass shatter`）→ 生成（需 Woosh 引擎）。
    - **影片 → V2A**：右鍵影片 clip → 生成同步底聲（MMAudio）。
    - **指定位置**：右鍵音軌空白 →「建立音效」（可命名）。
 4. **混音** — 左欄「效果」分頁 → 選軌 → fader / M；「+ 加效果」→ EQ / 壓縮 / 限幅（**點名字開浮窗**）；Main Out 的 **LIMIT** 防爆母帶。
@@ -124,6 +126,7 @@ AudioSFX runs two AI models on your own machine (local GPU) to generate SFX, let
 ### Features
 
 - 🎬 **9:16 vertical timeline editor** — video / audio / text tracks; move, trim, split
+- 📚 **Built-in CC0 SFX library** — 400+ ready-to-use sounds (Kenney.nl), **no engine needed, instant**: impacts / footsteps / UI / digital / sci-fi / foley
 - 🤖 **Three ways to generate SFX** — text→SFX, video→V2A synced audio, generate at a track position
 - 🎚 **DAW-style mixing** — per-track EQ / compressor / limiter (draggable floating editors) + master brickwall limiter
 - 🖥 **Floating preview** — bottom-right, draggable & resizable
@@ -159,8 +162,9 @@ A built-in MCP server (`server/mcp-server.mts`) lets **Claude / Codex drive the 
 
 1. **New project + import** — Project ▾ → New; drag a video/audio file into the window.
 2. **Timeline editing** — move / trim / split; rename, lock, mute tracks. Selected track is indigo, muted track is amber.
-3. **Generate SFX** (three entry points):
-   - **Text → SFX**: top 〰 "音效" floating window → English prompt (e.g. `glass shatter`) → generate.
+3. **Add SFX**: top 〰 "音效" floating window has two tabs —
+   - **Library** (fastest, no engine): pick a category / search → ▶ preview → "＋軌" to drop on the timeline, or "素材" to import only.
+   - **AI generate — Text → SFX**: English prompt (e.g. `glass shatter`) → generate (needs the Woosh engine).
    - **Video → V2A**: right-click a video clip → generate synced ambience (MMAudio).
    - **At a position**: right-click empty audio track → "建立音效" (Create SFX, nameable).
 4. **Mix** — left "效果" (Effects) tab → pick a track → fader / mute; "+ add effect" → EQ / compressor / limiter (**click the name to open a floating editor**); Main Out **LIMIT** for a master brickwall limiter.

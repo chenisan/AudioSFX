@@ -78,6 +78,10 @@
       {
         "from": "NOTICE.md",
         "to": "NOTICE.md"
+      },
+      {
+        "from": "assets/sfx-library",
+        "to": "sfx-library"
       }
     ],
     "asarUnpack": [

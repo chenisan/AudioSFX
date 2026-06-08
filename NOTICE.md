@@ -39,6 +39,18 @@ Both weights are **non-commercial only**, which is why AudioSFX stays non-commer
 
 ---
 
+## 內建音效庫 · Bundled SFX library
+
+AudioSFX 內建一套即用音效庫（隨安裝檔散布）。
+AudioSFX bundles a ready-to-use SFX library (shipped inside the installer).
+
+- **來源 / Source**：**Kenney.nl** asset packs（Interface / Impact / Digital / RPG / Sci-Fi Audio）。
+- **授權 / License**：**Creative Commons CC0 1.0 Universal**（公眾領域，可自由使用、無需署名）。
+  CC0 1.0 (public domain — free to use, no attribution required); attribution kept here as courtesy.
+- **專案 / Project**：<https://kenney.nl> · <https://creativecommons.org/publicdomain/zero/1.0/>
+
+---
+
 ## 字型 · Fonts
 
 - **Noto Sans TC**（CJK 文字渲染）— SIL Open Font License 1.1。

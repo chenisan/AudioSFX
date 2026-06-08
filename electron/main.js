@@ -24,6 +24,13 @@ process.env.FFPROBE_PATH = app.isPackaged
   ? path.join(process.resourcesPath, exe('ffprobe'))
   : require('ffprobe-static').path
 
+// Bundled CC0 SFX library (Kenney.nl). Packaged → resources/sfx-library (copied
+// via extraResources); dev → server/core/sfxLibrary.ts falls back to the repo's
+// assets/sfx-library. server/core/sfxLibrary.getLibraryDir() reads this env.
+process.env.SFX_LIBRARY_DIR = app.isPackaged
+  ? path.join(process.resourcesPath, 'sfx-library')
+  : path.join(__dirname, '..', 'assets', 'sfx-library')
+
 // getDataDir() picks this up after the explicit VIDEO_ENGINE_DATA_DIR override
 // (priority 1), so tests/CI can still inject their own dir.
 process.env.ELECTRON_USER_DATA_DIR = DATA_DIR
