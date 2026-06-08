@@ -17,6 +17,14 @@ const CONCURRENCY = 3
 
 const enc = (name) => name.split('/').map(encodeURIComponent).join('/')
 
+// Windows can't have : * ? " < > | in path segments (Sonniss has folders like
+// "Tools:Construction"). Sanitize each segment for the local dest; the download
+// URL still uses the original name. scanLocal reads whatever lands on disk, so
+// import/preview stay consistent with these sanitized names.
+const ILLEGAL = /[:*?"<>|]/g
+const destPath = (name) =>
+  path.join(DEST, ...name.split('/').map(seg => seg.replace(ILLEGAL, '-').replace(/[ .]+$/, '').trim()))
+
 async function fileList(id) {
   const res = await fetch(`https://archive.org/metadata/${id}`)
   const m = await res.json()
@@ -27,13 +35,17 @@ async function fileList(id) {
       name: f.name,
       size: Number(f.size || 0),
       url: `https://archive.org/download/${id}/${enc(f.name)}`,
-      dest: path.join(DEST, f.name),
+      dest: destPath(f.name),
     }))
 }
 
 function curl(item) {
   return new Promise((resolve) => {
-    fs.mkdirSync(path.dirname(item.dest), { recursive: true })
+    try {
+      fs.mkdirSync(path.dirname(item.dest), { recursive: true })
+    } catch (e) {
+      return resolve({ ok: false, err: `mkdir: ${e.message}` })
+    }
     const args = ['-sSL', '-C', '-', '--retry', '5', '--retry-delay', '3',
       '--retry-all-errors', '-o', item.dest, item.url]
     const p = spawn('curl', args)
@@ -61,14 +73,17 @@ async function run() {
   async function worker() {
     while (idx < items.length) {
       const item = items[idx++]
+      let r
       try {
         const st = await fsp.stat(item.dest).catch(() => null)
         if (st && item.size && st.size === item.size) { skipped++; done++; continue }
-      } catch {}
-      const r = await curl(item)
+        r = await curl(item)
+      } catch (e) {
+        r = { ok: false, err: e.message }
+      }
       done++
       if (r.ok) { gotBytes += item.size }
-      else { failed++; console.log(`  ✗ ${item.name}\n    ${r.err.slice(0, 200)}`) }
+      else { failed++; console.log(`  ✗ ${item.name}\n    ${(r.err || '').slice(0, 200)}`) }
       if (done % 25 === 0 || done === items.length) {
         console.log(`  ${done}/${items.length}  (skip ${skipped}, fail ${failed}, ~${(gotBytes / 1e9).toFixed(1)} GB new)`)
       }
