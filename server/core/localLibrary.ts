@@ -13,7 +13,43 @@ import { getMediaInfo } from '../utils/ffprobe'
 const AUDIO = new Set(['.wav', '.aif', '.aiff', '.mp3', '.ogg', '.flac', '.m4a', '.aac'])
 const MAX_ITEMS = 8000   // cap JSON size for huge libraries (e.g. full Sonniss archive)
 
-export interface LocalItem { id: string; name: string; category: string }
+// Content-based Chinese category from English keywords in the filename/folder.
+// Local packs (Sonniss etc.) group by CONTRIBUTOR name ("Coll Anderson - Battle
+// Crowd"), which says nothing about the sound type — so we re-tag by keywords.
+// Order = priority: more specific first (爆炸/槍械/車輛 before generic 撞擊/環境).
+const CATEGORY_RULES: [string, RegExp][] = [
+  ['爆炸', /\b(explosion|explos|blast|detonat|bomb|kaboom)/],
+  ['槍械', /\b(gun|gunshot|rifle|pistol|shotgun|firearm|bullet|reload|ammo|machinegun|revolver|sniper)/],
+  ['刀劍近戰', /\b(sword|blade|knife|slash|stab|machete|katana|melee)/],
+  ['車輛引擎', /\b(car|cars|vehicle|engine|motor|driveby|drive-by|drive|traffic|truck|motorcycle|race|racing|tyre|tire|brake|automobile|cadillac|fiat|porsche|ferrari|bus|train|tram|chassis)/],
+  ['撞擊破壞', /\b(impact|crash|destruction|destroy|smash|break|broke|shatter|collision|debris|demolition|bash|thud|wreck|crush|hit)/],
+  ['血腥 Gore', /\b(gore|flesh|skin|skinning|meat|bone|gristle|guts?|blood|splat|squelch|squish|cavity|\brip\b|sawing)/],
+  ['警報警笛', /\b(siren|alarm|klaxon|whistle|honk|buzzer)/],
+  ['腳步', /\b(footstep|footsteps|foot|walk|walking|running|jog|steps?)\b/],
+  ['群眾人聲', /\b(crowd|voice|vocal|scream|shout|cheer|chatter|talk|speak|laugh|breath|grunt|whisper|applause|murmur|clap)/],
+  ['動物', /\b(animal|dog|cat|bird|horse|insect|lion|tiger|monster|creature|growl|roar|bark|meow|chirp|pig|snort|squeal|oink|deer|cow|sheep|goat|hen|chicken|rooster|hoof)/],
+  ['水與液體', /\b(water|splash|liquid|drip|pour|river|ocean|sea|wave|bubble|underwater|stream|rain)/],
+  ['火', /\b(fire|flame|burn|burning|ignite|combust|torch|campfire)/],
+  ['風與天氣', /\b(wind|storm|thunder|weather|breeze|snow|gale|blizzard)/],
+  ['科技電子', /\b(ui|interface|menu|button|beep|computer|digital|glitch|electronic|robot|sci-?fi|cyber|hud|notification|tech|terminal|scanner|hologram)/],
+  ['魔法科幻', /\b(magic|spell|energy|force ?field|forcefield|laser|plasma|power-?up|powerup|teleport|portal|aura|fantasy)/],
+  ['轉場 whoosh', /\b(whoosh|woosh|swoosh|swish|transition|riser|sweep|pass-?by|passby|flyby|fly-?by|tension|osc)/],
+  ['機械工業', /\b(machine|mechanic|mechanical|gear|hydraulic|servo|industrial|factory|conveyor|crane)/],
+  ['物件 Foley', /\b(cloth|fabric|paper|wood|wooden|metal|metallic|glass|plastic|door|drawer|keys?|coin|book|switch|handle|foley|rope|chain|lock|zipper|sink|cupboard|cabinet|faucet|tap|kitchen|bathroom|spring|bounce|squeak)/],
+  ['音樂節奏', /\b(music|musical|drum|melody|loop|beat|rhythm|jingle|stinger|chord|piano|guitar|synth|orchestra)/],
+  ['環境氛圍', /\b(ambien|ambient|atmos|atmosphere|roomtone|room ?tone|background|city|street|forest|nature|park|office|restaurant|drone)/],
+]
+
+/** filename keywords win; fall back to folder path; else 其他. */
+function categorize(relpath: string): string {
+  const base = (relpath.split('/').pop() || '').toLowerCase()
+  for (const [label, re] of CATEGORY_RULES) if (re.test(base)) return label
+  const full = relpath.toLowerCase()
+  for (const [label, re] of CATEGORY_RULES) if (re.test(full)) return label
+  return '其他'
+}
+
+export interface LocalItem { id: string; name: string; category: string; folder: string }
 export interface LocalScan {
   dir: string
   available: boolean
@@ -35,11 +71,13 @@ function walk(root: string, dir: string, out: { items: LocalItem[]; truncated: b
       if (out.truncated) return
     } else if (AUDIO.has(path.extname(e.name).toLowerCase())) {
       const rel = path.relative(root, full)
+      const id = rel.split(path.sep).join('/')               // forward-slash relpath
       const parent = path.basename(path.dirname(full))
       out.items.push({
-        id: rel.split(path.sep).join('/'),                 // forward-slash relpath
+        id,
         name: e.name.replace(/\.[^.]+$/, ''),
-        category: parent && parent !== '.' ? parent : '(root)',
+        category: categorize(id),                            // 中文 type from keywords
+        folder: parent && parent !== '.' ? parent : '',      // contributor/pack, for reference
       })
     }
   }
@@ -62,7 +100,8 @@ export function scanLocal(root: string, opts: { refresh?: boolean } = {}): Local
   for (const it of out.items) catMap[it.category] = (catMap[it.category] || 0) + 1
   const categories = Object.entries(catMap)
     .map(([id, count]) => ({ id, count }))
-    .sort((a, b) => a.id.localeCompare(b.id))
+    // by count desc (most useful types first); 其他 always last
+    .sort((a, b) => (a.id === '其他' ? 1 : b.id === '其他' ? -1 : b.count - a.count))
   const scan: LocalScan = {
     dir: abs, available: true, count: out.items.length,
     truncated: out.truncated, categories, items: out.items,

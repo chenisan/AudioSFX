@@ -98,7 +98,9 @@ export default function LocalLibraryPanel() {
     return items.filter(it => {
       if (cat !== 'all' && it.category !== cat) return false
       if (!needle) return true
-      return it.name.toLowerCase().includes(needle) || it.category.toLowerCase().includes(needle)
+      return it.name.toLowerCase().includes(needle)
+        || it.category.toLowerCase().includes(needle)
+        || (it.folder || '').toLowerCase().includes(needle)
     })
   }, [items, cat, q])
 
@@ -200,7 +202,10 @@ export default function LocalLibraryPanel() {
               >{playingId === item.id ? '❚❚' : '▶'}</button>
               <div className="flex-1 min-w-0">
                 <div className="text-[11px] text-[#ccc] truncate" title={item.name}>{item.name}</div>
-                <div className="text-[9px] text-[#555] truncate" title={item.category}>{item.category}</div>
+                <div className="text-[9px] text-[#555] truncate" title={item.folder}>
+                  <span className="text-[#22c55e]/70">{item.category}</span>
+                  {item.folder ? ` · ${item.folder}` : ''}
+                </div>
               </div>
               <button
                 onClick={() => addToAssets(item)}
