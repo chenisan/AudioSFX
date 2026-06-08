@@ -20,6 +20,7 @@ import settingsRouter from './routes/settings'
 import audioGenRouter from './routes/audioGen'
 import servicesRouter from './routes/services'
 import sfxLibraryRouter from './routes/sfxLibrary'
+import localLibraryRouter from './routes/localLibrary'
 import { detectHwAccel } from './utils/hwAccel'
 import { requireValidProjectIdParam } from './utils/projectIdGuard'
 import { getDataDir } from './utils/dataDir'
@@ -70,6 +71,7 @@ app.use('/api/settings', settingsRouter)
 app.use('/api/audio', audioGenRouter)
 app.use('/api/services', servicesRouter)
 app.use('/api/sfx-library', sfxLibraryRouter)
+app.use('/api/local-library', localLibraryRouter)
 
 // Production: serve frontend static files
 // When running from source: __dirname = server/, dist is at ../dist

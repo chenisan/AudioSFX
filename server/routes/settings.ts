@@ -28,6 +28,8 @@ interface AppSettings {
   setupComplete: boolean
   /** LeftPanel tab ids the user has chosen to hide. Empty = show all. */
   hiddenLeftTabs: string[]
+  /** Local SFX folder the user browses in the「本機」tab. '' = not configured. */
+  localSfxDir: string
 }
 
 const DEFAULTS: AppSettings = {
@@ -41,6 +43,7 @@ const DEFAULTS: AppSettings = {
   whisperLanguage: 'zh',
   setupComplete: true,
   hiddenLeftTabs: [],
+  localSfxDir: '',
 }
 
 function readSettings(): AppSettings {
