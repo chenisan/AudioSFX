@@ -1,19 +1,48 @@
-// Download original WAV/AIF files of selected Sonniss GDC bundles from archive.org
-// into D:\sfx_sample. NOT bundled with AudioSFX — this is a personal local library
-// the user points the app at (server/core/localLibrary). Skips archive.org's
-// derivative flac/mp3/png. Idempotent + resumable: skips files already complete,
-// resumes partial ones (curl -C -). Re-run safely if it dies.
+// Download original WAV/AIF files of Sonniss GDC bundles from archive.org into a
+// folder you then point AudioSFX at (the「本機」tab / server/core/localLibrary).
+// The bundles are royalty-free but NOT redistributable as files, so they are NOT
+// bundled with AudioSFX — each user fetches their own. Skips archive.org's
+// derivative flac/mp3/png. Idempotent + resumable (curl -C -): re-run safely.
 //
-//   node scripts/download-sonniss.mjs
+// Usage:
+//   node scripts/download-sonniss.mjs --dest <folder> [--ids id1,id2] [--concurrency N]
+//
+// Examples:
+//   node scripts/download-sonniss.mjs --dest D:\sfx_sample
+//   node scripts/download-sonniss.mjs --dest /mnt/sfx --ids game-audio-gdcpart-2
+//   SONNISS_DEST=D:\sfx node scripts/download-sonniss.mjs
+//
+// archive.org identifiers by year (more at archive.org, search "Sonniss GDC"):
+//   2015  game-audio-gdc            2016  game-audio-gdcpart-2
+//   2017  game-audio-gdcpart-3      2018  game-audio-gdcpart-4
+//   2019  game-audio-gdcpart-5      2020  sonniss-gdc-2020-game-audio-bundle
+//   2023  gdc-2023-game-audio-bundle
+// Default (no --ids) = 2015 + 2016 (smaller, more discrete usable SFX, ~26GB WAV).
 import { spawn } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as fsp from 'node:fs/promises'
 import * as path from 'node:path'
 
-const DEST = process.env.SONNISS_DEST || 'D:\\sfx_sample'
-const IDS = ['game-audio-gdc', 'game-audio-gdcpart-2']   // 2015 + 2016
+const argv = process.argv.slice(2)
+const flag = (name) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : null }
+
+if (argv.includes('--help') || argv.includes('-h')) {
+  console.log('Usage: node scripts/download-sonniss.mjs --dest <folder> [--ids id1,id2] [--concurrency N]')
+  console.log('See the header of this file for archive.org identifiers per year.')
+  process.exit(0)
+}
+
+const DEST = flag('--dest') || process.env.SONNISS_DEST
+if (!DEST) {
+  console.error('error: no destination. Pass --dest <folder> or set SONNISS_DEST.')
+  console.error('       node scripts/download-sonniss.mjs --help')
+  process.exit(1)
+}
+const idsArg = flag('--ids')
+const IDS = idsArg ? idsArg.split(',').map(s => s.trim()).filter(Boolean)
+  : ['game-audio-gdc', 'game-audio-gdcpart-2']   // 2015 + 2016
 const AUDIO_EXT = new Set(['.wav', '.aif', '.aiff'])
-const CONCURRENCY = 3
+const CONCURRENCY = Number(flag('--concurrency')) || 3
 
 const enc = (name) => name.split('/').map(encodeURIComponent).join('/')
 
