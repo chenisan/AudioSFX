@@ -27,3 +27,74 @@
     border-radius: 3px;
   }
 }
+
+/* ── Skeuomorphic amp-head surfaces (dark) ──────────────────────────────────
+   Texture image (--amp-tex) is layered over CSS gradients so the look holds up
+   even before the generated tile is wired in. Set --amp-tex: url(...) on a
+   wrapper to overlay the real brushed-metal/carbon texture. */
+@layer components {
+  .amp-faceplate {
+    background-color: #17171a;
+    background-image:
+      var(--amp-tex, none),
+      radial-gradient(140% 100% at 50% -20%, rgba(255, 255, 255, 0.07), transparent 55%),
+      linear-gradient(180deg, #202024 0%, #17171a 55%, #101012 100%);
+    background-size: 180px 180px, cover, cover;
+    /* soft-light lets the near-black carbon weave read without washing out */
+    background-blend-mode: soft-light, normal, normal;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.7);
+  }
+  /* brushed-metal control rail — clearly lighter than the faceplate, with a
+     visible vertical brushing so it reads as a machined strip. */
+  .amp-rail {
+    background-image:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0.4)),
+      repeating-linear-gradient(90deg, #3b3b42 0 1px, #303036 1px 2px, #35353c 2px 3px);
+    border-bottom: 1px solid #000;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      inset 0 -3px 6px rgba(0, 0, 0, 0.6),
+      0 1px 0 rgba(0, 0, 0, 0.5);
+  }
+  /* raised metal bezel plate — bright top bevel + dark underside + drop shadow
+     so each section reads as a physical plate screwed onto the faceplate. */
+  .amp-bezel {
+    position: relative;
+    background: linear-gradient(180deg, #35353b 0%, #27272c 8%, #1c1c20 100%);
+    border: 1px solid #000;
+    border-radius: 12px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.20),
+      inset 0 2px 3px rgba(255, 255, 255, 0.05),
+      inset 0 -12px 22px rgba(0, 0, 0, 0.35),
+      0 3px 9px rgba(0, 0, 0, 0.65);
+  }
+  /* recessed groove (insets / readout wells) — deep dark well, hard shadow */
+  .amp-inset {
+    background: linear-gradient(180deg, #060608, #141417);
+    box-shadow:
+      inset 0 2px 6px rgba(0, 0, 0, 0.8),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  }
+  /* a chrome corner screw */
+  .amp-screw {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 36% 30%, #74747c, #2a2a2e 62%, #141416 100%);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.7), 0 1px 2px rgba(0, 0, 0, 0.6);
+    position: relative;
+  }
+  .amp-screw::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 7px;
+    height: 1.5px;
+    background: rgba(0, 0, 0, 0.6);
+    transform: rotate(40deg);
+  }
+}

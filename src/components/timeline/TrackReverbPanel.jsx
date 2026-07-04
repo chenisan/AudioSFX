@@ -43,6 +43,7 @@ export default function TrackReverbPanel({ params, onChange }) {
     <Knob
       key={f.key} label={f.label} value={Number(params?.[f.key] ?? f.def)}
       min={f.min} max={f.max} step={f.step} def={f.def} unit={f.unit} color={f.color} scale={0.82}
+      variant="amp"
       onChange={(v, persist) => set(f.key, v, persist)}
     />
   )
@@ -55,7 +56,7 @@ export default function TrackReverbPanel({ params, onChange }) {
           <Knob
             label={SPACE.label} value={Number(params?.space ?? SPACE.def)}
             min={SPACE.min} max={SPACE.max} step={SPACE.step} def={SPACE.def} color={SPACE.color}
-            format={SPACE.format} scale={1.45}
+            format={SPACE.format} scale={1.45} variant="amp"
             onChange={(v, persist) => set('space', v, persist)}
           />
         </div>
