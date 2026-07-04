@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useProjectStore } from '../../stores/projectStore'
 import { useProject } from '../../hooks/useProject'
 import FolderedList from '../common/FolderedList'
+import PanelButton from '../skeuo/PanelButton'
+import ampTex from '../../assets/textures/amp-panel-dark.png'
 
 const ACCEPT = 'video/*,audio/*,image/*,.mp4,.mov,.mp3,.wav,.aac'
 
@@ -56,7 +58,7 @@ function AssetCard({ asset, projectId, onDelete, isActive, onSelect }) {
 
   return (
     <div
-      className={`flex items-center gap-2 p-1.5 rounded cursor-grab group ${isActive ? 'bg-[#6d5efc]/15 ring-1 ring-[#6d5efc]/40' : 'hover:bg-[#2a2a2a]'}`}
+      className={`flex items-center gap-2 p-1.5 rounded cursor-grab group ${isActive ? 'bg-[#6d5efc]/15 ring-1 ring-[#6d5efc]/40' : 'hover:bg-white/[0.045]'}`}
       draggable
       onDragStart={handleDragStart}
       onClick={() => onSelect(asset.filename, type)}
@@ -225,30 +227,31 @@ export default function AssetPanel() {
 
   return (
     <div
-      className={`flex flex-col h-full transition-colors ${isDragOver ? 'bg-[#6d5efc]/10' : ''}`}
+      className={`amp-faceplate flex flex-col h-full transition-shadow ${isDragOver ? 'ring-2 ring-inset ring-[#6d5efc]/50' : ''}`}
+      style={{ '--amp-tex': `url(${ampTex})` }}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[#2a2a2a] shrink-0">
-        <span className="text-xs text-[#888]">素材 {assets.length > 0 && `(${assets.length})`}</span>
+      {/* Header — brushed-metal rail, same as the effects tab's PRESET rail */}
+      <div className="amp-rail flex items-center justify-between px-3 py-2 shrink-0">
+        <span className="text-[10px] font-semibold tracking-[0.12em] text-[#8a8378]">
+          素材{assets.length > 0 && ` · ${assets.length}`}
+        </span>
         <div className="flex gap-1 items-center">
           {/* Sort toggle — single button cycling between filename-asc and
               mtime-desc. Compact icon-only to keep the header narrow. */}
           <button
             onClick={() => setSortMode(s => s === 'name' ? 'newest' : 'name')}
-            className="text-[10px] text-[#888] hover:text-[#ccc] px-1.5 py-0.5 rounded border border-[#333] hover:border-[#555] transition-colors"
+            className="text-[10px] text-[#9a948b] hover:text-[#d8d2c6] px-1.5 py-0.5 rounded border border-black/50 hover:border-[#555] bg-black/25 transition-colors"
             title={sortMode === 'name' ? '依檔名排序（點擊改成新到舊）' : '新到舊排序（點擊改成檔名）'}
           >
             {sortMode === 'name' ? 'A→Z' : '🕒新'}
           </button>
-          <button onClick={reload} className="text-xs text-[#666] hover:text-[#999] px-1" title="重新整理">↻</button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={!projectId}
-            className="text-xs bg-[#2a2a2a] hover:bg-[#333] disabled:opacity-40 text-[#aaa] px-2 py-0.5 rounded"
-          >+ 上傳</button>
+          <button onClick={reload} className="text-xs text-[#8a8378] hover:text-[#d8d2c6] px-1" title="重新整理">↻</button>
+          <PanelButton onClick={() => fileInputRef.current?.click()} disabled={!projectId} accent title="上傳素材檔">
+            + 上傳
+          </PanelButton>
         </div>
       </div>
 
@@ -261,9 +264,9 @@ export default function AssetPanel() {
         onChange={(e) => handleFiles([...e.target.files])}
       />
 
-      {/* Type filter */}
+      {/* Type filter — recessed chips on the faceplate; active one lights up */}
       {assets.length > 0 && (
-        <div className="flex gap-1 px-2 py-1.5 border-b border-[#2a2a2a] shrink-0">
+        <div className="flex gap-1 px-2 py-1.5 border-b border-black/40 shrink-0">
           {[
             { key: 'all', label: '全部' },
             { key: 'video', label: '影音' },
@@ -278,8 +281,8 @@ export default function AssetPanel() {
                 onClick={() => setTypeFilter(key)}
                 className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
                   active
-                    ? 'bg-[#6d5efc] text-white'
-                    : 'bg-[#2a2a2a] text-[#888] hover:bg-[#333] hover:text-[#ccc]'
+                    ? 'bg-[#6d5efc] text-white shadow-[0_0_8px_rgba(109,94,252,0.35)]'
+                    : 'bg-black/30 text-[#9a948b] border border-black/40 hover:text-[#d8d2c6] hover:bg-black/20'
                 }`}
               >
                 {label} {count > 0 && <span className="opacity-70">({count})</span>}
