@@ -80,11 +80,15 @@ async function headSize(url: string, signal: AbortSignal): Promise<number> {
   }
 }
 
+// The system bsdtar — NOT a bare `tar`, which on a Git-Bash-inherited PATH
+// resolves to GNU tar and reads a `C:\…` path as a remote host ("Cannot connect
+// to C:"). The Windows-bundled bsdtar handles drive-letter paths + auto-detects
+// zip, and is far faster/lighter than Expand-Archive on multi-GB archives.
+const BSDTAR = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')
+
 function extractZip(zip: string, dest: string): Promise<void> {
-  // bsdtar (built into Win10+) auto-detects zip and is faster/lighter than
-  // Expand-Archive for multi-GB archives.
   return new Promise((resolve, reject) => {
-    const child = spawn('tar', ['-xf', zip, '-C', dest], { windowsHide: true })
+    const child = spawn(BSDTAR, ['-xf', zip, '-C', dest], { windowsHide: true })
     let err = ''
     child.stderr.on('data', d => { err += String(d) })
     child.on('error', reject)
