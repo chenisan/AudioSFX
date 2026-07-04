@@ -73,20 +73,40 @@ export default function Knob({ label, value, min = 0, max = 100, step = 1, unit 
               <stop offset="0.6" stopColor={color} stopOpacity="0.07" />
               <stop offset="1" stopColor={color} stopOpacity="0" />
             </radialGradient>
+            {/* machined bezel: top-lit steel that falls to near-black */}
             <linearGradient id={`aring-${uid}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#4a4a4e" />
-              <stop offset="0.5" stopColor="#26262a" />
-              <stop offset="1" stopColor="#0b0b0d" />
+              <stop offset="0" stopColor="#6a6a72" />
+              <stop offset="0.28" stopColor="#3a3a40" />
+              <stop offset="0.62" stopColor="#1c1c20" />
+              <stop offset="1" stopColor="#050506" />
             </linearGradient>
-            <radialGradient id={`aface-${uid}`} cx="0.40" cy="0.32" r="0.85">
-              <stop offset="0" stopColor="#2e2e31" />
-              <stop offset="0.5" stopColor="#1a1a1c" />
-              <stop offset="1" stopColor="#08080a" />
+            {/* anodized sheen swept across the bezel (fakes a conic highlight) */}
+            <linearGradient id={`asheen-${uid}`} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stopColor="#fff" stopOpacity="0.22" />
+              <stop offset="0.35" stopColor="#fff" stopOpacity="0.02" />
+              <stop offset="0.65" stopColor="#000" stopOpacity="0.12" />
+              <stop offset="1" stopColor="#fff" stopOpacity="0.10" />
+            </linearGradient>
+            {/* domed matte face, light source upper-left */}
+            <radialGradient id={`aface-${uid}`} cx="0.36" cy="0.26" r="0.95">
+              <stop offset="0" stopColor="#3a3a3f" />
+              <stop offset="0.35" stopColor="#232327" />
+              <stop offset="0.75" stopColor="#121215" />
+              <stop offset="1" stopColor="#050507" />
+            </radialGradient>
+            {/* soft specular blob on the dome */}
+            <radialGradient id={`aspec-${uid}`} cx="0.5" cy="0.5" r="0.5">
+              <stop offset="0" stopColor="#fff" stopOpacity="0.30" />
+              <stop offset="0.55" stopColor="#fff" stopOpacity="0.08" />
+              <stop offset="1" stopColor="#fff" stopOpacity="0" />
             </radialGradient>
             <radialGradient id={`ash-${uid}`} cx="0.5" cy="0.5" r="0.5">
-              <stop offset="0.55" stopColor="rgba(0,0,0,0.65)" />
+              <stop offset="0.45" stopColor="rgba(0,0,0,0.7)" />
               <stop offset="1" stopColor="rgba(0,0,0,0)" />
             </radialGradient>
+            <filter id={`ablur-${uid}`} x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="1.6" />
+            </filter>
           </defs>
 
           {/* warm accent bloom */}
@@ -109,21 +129,83 @@ export default function Knob({ label, value, min = 0, max = 100, step = 1, unit 
             )
           })}
 
-          {/* cast shadow */}
-          <ellipse cx={C} cy={C + 3.5} rx={D + 2.5} ry={D + 1.5} fill={`url(#ash-${uid})`} />
-          {/* knurled metal bezel */}
-          <circle cx={C} cy={C} r={D + 3} fill={`url(#aring-${uid})`} stroke="#000" strokeOpacity="0.5" strokeWidth="0.8" />
-          {/* matte dial face */}
-          <circle cx={C} cy={C} r={D} fill={`url(#aface-${uid})`} stroke="#000" strokeOpacity="0.6" strokeWidth="0.6" />
-          {/* faint top rim highlight */}
-          <path
-            d={`M ${C - D * 0.7} ${C - D * 0.62} A ${D} ${D} 0 0 1 ${C + D * 0.7} ${C - D * 0.62}`}
-            fill="none" stroke="#fff" strokeOpacity="0.10" strokeWidth="1.1" strokeLinecap="round"
+          {/* soft cast shadow (blurred, offset down-right like the panel light) */}
+          <ellipse cx={C + 1} cy={C + 4} rx={D + 3} ry={D + 2} fill={`url(#ash-${uid})`} filter={`url(#ablur-${uid})`} />
+
+          {/* machined bezel + anodized sheen */}
+          <circle cx={C} cy={C} r={D + 3.5} fill={`url(#aring-${uid})`} stroke="#000" strokeOpacity="0.65" strokeWidth="0.9" />
+          <circle cx={C} cy={C} r={D + 3.5} fill="none" stroke={`url(#asheen-${uid})`} strokeWidth="2.4" />
+          {/* knurled grip: fine teeth cut into the bezel edge */}
+          <circle
+            cx={C} cy={C} r={D + 2.2} fill="none"
+            stroke="#000" strokeOpacity="0.55" strokeWidth="2.6"
+            strokeDasharray="1.1 1.55"
           />
-          {/* light indicator line from face centre toward the rim */}
-          <g transform={`rotate(${START + frac * SWEEP} ${C} ${C})`}>
-            <line x1={C} y1={C - 6} x2={C} y2={C - (D - 3)} stroke="#e9e2d6" strokeWidth="1.8" strokeLinecap="round" />
-          </g>
+          <circle
+            cx={C} cy={C} r={D + 2.2} fill="none"
+            stroke="#8a8a92" strokeOpacity="0.28" strokeWidth="1"
+            strokeDasharray="1.1 1.55" strokeDashoffset="0.55"
+          />
+          {/* inner collar between grip and face */}
+          <circle cx={C} cy={C} r={D + 0.8} fill="none" stroke="#000" strokeOpacity="0.8" strokeWidth="1.2" />
+          <circle cx={C} cy={C} r={D + 0.2} fill="none" stroke="#fff" strokeOpacity="0.07" strokeWidth="0.6" />
+
+          {/* domed matte face */}
+          <circle cx={C} cy={C} r={D} fill={`url(#aface-${uid})`} stroke="#000" strokeOpacity="0.7" strokeWidth="0.6" />
+          {/* concentric machining rings on the face */}
+          {[0.82, 0.62, 0.42].map((k) => (
+            <circle
+              key={k} cx={C} cy={C} r={D * k} fill="none"
+              stroke="#fff" strokeOpacity="0.035" strokeWidth="0.7"
+            />
+          ))}
+          {[0.72, 0.52].map((k) => (
+            <circle
+              key={k} cx={C} cy={C} r={D * k} fill="none"
+              stroke="#000" strokeOpacity="0.25" strokeWidth="0.5"
+            />
+          ))}
+          {/* soft specular blob (upper-left light) + crisp rim catch-light */}
+          <ellipse cx={C - D * 0.34} cy={C - D * 0.42} rx={D * 0.55} ry={D * 0.38} fill={`url(#aspec-${uid})`} />
+          <path
+            d={`M ${C - D * 0.72} ${C - D * 0.60} A ${D * 0.94} ${D * 0.94} 0 0 1 ${C + D * 0.55} ${C - D * 0.74}`}
+            fill="none" stroke="#fff" strokeOpacity="0.16" strokeWidth="1.2" strokeLinecap="round"
+          />
+          {/* bottom bounce light off the panel */}
+          <path
+            d={`M ${C - D * 0.55} ${C + D * 0.74} A ${D * 0.92} ${D * 0.92} 0 0 0 ${C + D * 0.55} ${C + D * 0.74}`}
+            fill="none" stroke="#fff" strokeOpacity="0.05" strokeWidth="1" strokeLinecap="round"
+          />
+          {/* engraved indicator — a groove CUT into the face with cream paint fill.
+              The inset illusion needs screen-space lighting (upper-left light →
+              lit lower-right edge, shadowed upper-left wall), so the endpoints are
+              computed directly instead of rotate()d: with a rotated group the
+              highlight would spin with the knob and read as a painted-on decal. */}
+          {(() => {
+            const a = ((START + frac * SWEEP) * Math.PI) / 180
+            const ux = Math.sin(a), uy = -Math.cos(a)
+            const x1 = C + 5 * ux, y1 = C + 5 * uy
+            const x2 = C + (D - 2.5) * ux, y2 = C + (D - 2.5) * uy
+            return (
+              <g>
+                {/* lit far edge: bright rim on the lower-right of the cut */}
+                <line x1={x1 + 0.8} y1={y1 + 0.8} x2={x2 + 0.8} y2={y2 + 0.8}
+                  stroke="#fff" strokeOpacity="0.28" strokeWidth="1.8" strokeLinecap="round" />
+                {/* shadowed near wall: upper-left edge of the cut */}
+                <line x1={x1 - 0.5} y1={y1 - 0.5} x2={x2 - 0.5} y2={y2 - 0.5}
+                  stroke="#000" strokeOpacity="0.9" strokeWidth="1.6" strokeLinecap="round" />
+                {/* groove floor */}
+                <line x1={x1} y1={y1} x2={x2} y2={y2}
+                  stroke="#060608" strokeWidth="2.2" strokeLinecap="round" />
+                {/* cream paint sitting DOWN IN the groove: narrower than the cut,
+                    dimmer than a surface line, its own top-left micro-shadow */}
+                <line x1={x1 + 0.15} y1={y1 + 0.15} x2={x2 + 0.15} y2={y2 + 0.15}
+                  stroke="#d8d0c0" strokeOpacity="0.92" strokeWidth="1.05" strokeLinecap="round" />
+                <line x1={x1 - 0.15} y1={y1 - 0.15} x2={x2 - 0.15} y2={y2 - 0.15}
+                  stroke="#000" strokeOpacity="0.22" strokeWidth="1.05" strokeLinecap="round" />
+              </g>
+            )
+          })()}
         </svg>
         <span className="text-[10px] font-mono text-[#c9c2b6] tabular-nums">{format ? format(v) : `${Math.round(v)}${unit}`}</span>
       </div>

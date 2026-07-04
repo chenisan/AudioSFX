@@ -127,7 +127,7 @@ export default function TrackFxEditor({ track }) {
           <FloatingWindow
             title={`${track.name} · ${PLUGIN_LABELS[editing.type] ?? editing.type}`}
             onClose={() => setEditingId(null)}
-            width={editing.type === 'eq' ? 480 : editing.type === 'reverb' ? 620 : 300}
+            width={editing.type === 'eq' ? 480 : editing.type === 'reverb' ? 620 : editing.type === 'compressor' ? 560 : editing.type === 'limiter' ? 260 : 300}
             initialX={380}
             initialY={130}
           >
