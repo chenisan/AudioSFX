@@ -61,23 +61,28 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
 
   return (
     <>
-      <header data-testid="app-header" className="flex items-center gap-3 px-4 py-2 border-b border-[#2a2a2a] bg-[#111] shrink-0">
-        {/* Brand */}
+      {/* Top bar = the brushed-metal rail across the amp head. Brand reads as a
+          backlit logo badge; the project selector is a recessed metal well. */}
+      <header data-testid="app-header" className="flex items-center gap-3 px-4 py-2 amp-rail shrink-0">
+        {/* Brand — backlit amp logo */}
         <div className="flex items-center mr-2">
-          <span className="text-[#6d5efc] font-bold">AudioSFX</span>
+          <span
+            className="text-[#6d5efc] font-bold tracking-wide"
+            style={{ textShadow: '0 0 10px rgba(109,94,252,0.55), 0 1px 2px rgba(0,0,0,0.9)' }}
+          >AudioSFX</span>
         </div>
 
-        {/* Project selector */}
+        {/* Project selector — recessed name well */}
         <button
           data-tour="project"
           onClick={onOpenProjectModal}
-          className="flex items-center gap-1.5 bg-[#1a1a1a] hover:bg-[#252525] border border-[#333] rounded px-3 py-1 text-sm text-[#ccc] transition-colors"
+          className="amp-inset flex items-center gap-1.5 rounded px-3 py-1 text-sm text-[#d8d2c6] hover:text-white transition-colors"
         >
           <span className="truncate max-w-[180px]">
             {projectId ? projectName : '選擇專案...'}
           </span>
           {isDirty && <span className="text-[#6d5efc] text-xs">●</span>}
-          <span className="text-[#555]">▾</span>
+          <span className="text-[#777]">▾</span>
         </button>
 
         <div className="flex-1" />
@@ -87,7 +92,7 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
           data-tour="save"
           onClick={handleSave}
           disabled={!projectId || saving || !isDirty}
-          className="w-8 h-8 flex items-center justify-center rounded text-[#aaa] hover:text-white hover:bg-[#1f1f1f] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#aaa] transition-colors"
+          className="w-8 h-8 flex items-center justify-center rounded text-[#aaa] hover:text-white hover:bg-white/[0.06] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#aaa] transition-colors"
           title={saving ? '儲存中…' : isDirty ? '儲存 (Ctrl+S)' : '已儲存'}
         >
           {saving ? <Spinner /> : (
@@ -103,7 +108,7 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
           onClick={handleOpenExport}
           disabled={!projectId || rendering || saving}
           data-testid="header-export"
-          className="w-8 h-8 flex items-center justify-center rounded text-[#6d5efc] hover:text-[#8b7dff] hover:bg-[#1f1f1f] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#6d5efc] disabled:cursor-not-allowed transition-colors"
+          className="w-8 h-8 flex items-center justify-center rounded text-[#6d5efc] hover:text-[#8b7dff] hover:bg-white/[0.06] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#6d5efc] disabled:cursor-not-allowed transition-colors"
           title={rendering ? '渲染中…' : saving ? '儲存中…' : '匯出'}
         >
           {(rendering || saving) ? <Spinner /> : (
@@ -127,14 +132,14 @@ export default function Header({ onOpenProjectModal, onOpenSettings }) {
           </svg>
         </button>
 
-        {/* Floating SFX-generation toggle */}
+        {/* Floating SFX window toggle (音效庫 + AI 生成) */}
         <button
           data-tour="sfx"
           onClick={toggleSfxOpen}
           className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
             sfxOpen ? 'text-[#6d5efc]' : 'text-[#666] hover:text-[#aaa]'
           }`}
-          title={sfxOpen ? '關閉音效生成' : '開啟音效生成'}
+          title={sfxOpen ? '關閉音效面板' : '開啟音效面板（內建音效庫＋AI 生成）'}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 10v4M7 6v12M11 3v18M15 7v10M19 10v4" />

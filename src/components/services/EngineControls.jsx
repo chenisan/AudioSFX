@@ -96,7 +96,7 @@ export default function EngineControls() {
     <div className="relative" ref={wrapRef}>
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 text-sm px-3 py-1 bg-[#1a1a1a] hover:bg-[#252525] border border-[#333] text-[#aaa] rounded transition-colors"
+        className="amp-inset flex items-center gap-1.5 text-sm px-3 py-1 text-[#c9c2b6] hover:text-white rounded transition-colors"
         title="推論服務控制 / 監控"
       >
         <span>引擎</span>
