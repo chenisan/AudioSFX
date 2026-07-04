@@ -11,19 +11,43 @@
 import { spawn, exec } from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
+import { hasDownloadableWeights } from '../core/engineInstaller'
 
 export type EngineName = 'woosh' | 'mmaudio'
 
 interface EngineDef {
   port: number
   label: string
+  // Files/dirs (relative to the engine dir) that MUST exist for the service to
+  // start. Neither the venv nor the multi-GB weights ship in the installer, so
+  // a fresh user has none of these — used to show "未安裝" instead of silently
+  // spawning a missing python.exe. Woosh weights have no online fallback, so
+  // its checkpoints are required; MMAudio auto-downloads weights on first run,
+  // so only its venv is required.
+  requires: string[]
 }
 
 // The engine name is also its subdir under engines/ (engines/woosh,
 // engines/mmaudio), each holding its own .venv + audiosfx_api.py wrapper.
 export const ENGINES: Record<EngineName, EngineDef> = {
-  woosh:   { port: 6302, label: 'Woosh (文字/影片→音效)' },
-  mmaudio: { port: 6303, label: 'MMAudio (影片→同步底聲)' },
+  woosh: {
+    port: 6302,
+    label: 'Woosh (文字/影片→音效)',
+    // venv + all 8 checkpoint dirs (T2A + V2A). KEEP IN SYNC with
+    // WEIGHT_MANIFEST[woosh] in core/engineInstaller.ts — those are the dirs the
+    // in-app downloader fetches, and "installed" means every one is present.
+    requires: [
+      '.venv/Scripts/python.exe',
+      'checkpoints/Woosh-AE', 'checkpoints/Woosh-CLAP', 'checkpoints/TextConditionerA',
+      'checkpoints/Woosh-DFlow', 'checkpoints/Woosh-Flow',
+      'checkpoints/TextConditionerV', 'checkpoints/Woosh-VFlow-8s', 'checkpoints/Woosh-DVFlow-8s',
+    ],
+  },
+  mmaudio: {
+    port: 6303,
+    label: 'MMAudio (影片→同步底聲)',
+    requires: ['.venv/Scripts/python.exe'],
+  },
 }
 
 // When a start was last requested — drives the transient "starting" status
@@ -35,7 +59,26 @@ export function isEngine(name: string): name is EngineName {
   return name === 'woosh' || name === 'mmaudio'
 }
 
+// Which required files are present. `installed=false` → the engine's venv or
+// weights aren't set up (typical for a fresh installer user); the UI surfaces
+// this + a link to ENGINES.md instead of pretending to start.
+export function engineInstall(name: EngineName): { installed: boolean; missing: string[] } {
+  const engineDir = path.join(process.cwd(), 'engines', name)
+  const missing = ENGINES[name].requires.filter(
+    rel => !fs.existsSync(path.join(engineDir, ...rel.split('/'))),
+  )
+  return { installed: missing.length === 0, missing }
+}
+
 export function startService(name: EngineName, now: number): void {
+  // Refuse to spawn if the venv/weights aren't installed — otherwise spawn hits
+  // ENOENT, the error vanishes into _svc.log, and the UI just shows "啟動中…"
+  // for the whole grace window then reverts to "已停止" ("按了沒反應").
+  const { installed, missing } = engineInstall(name)
+  if (!installed) {
+    throw new Error(`引擎未安裝，缺少：${missing.join('、')}。請依 ENGINES.md 安裝後再啟動。`)
+  }
+
   // Spawn the venv python directly (not via the .ps1 / pwsh) — fewer moving
   // parts, and PYTHONUNBUFFERED makes the log flush live instead of block-
   // buffering behind a non-TTY pipe. The wrapper itself injects the ffmpeg
@@ -91,6 +134,9 @@ export interface EngineStatus {
   label: string
   port: number
   state: 'ready' | 'starting' | 'stopped'
+  installed: boolean
+  missing: string[]
+  downloadable: boolean   // weights are auto-fetchable in-app (Woosh); false → guided setup only
   onGpu: unknown
   loaded: unknown
 }
@@ -104,7 +150,14 @@ export async function statusOf(name: EngineName, now: number): Promise<EngineSta
   else state = 'stopped'
   // Once up, clear the grace marker.
   if (p) delete startedAt[name]
-  return { name, label: def.label, port: def.port, state, onGpu: p?.on_gpu ?? null, loaded: p?.loaded ?? null }
+  // A running service is installed by definition; skip the fs check for it.
+  const inst = p ? { installed: true, missing: [] as string[] } : engineInstall(name)
+  return {
+    name, label: def.label, port: def.port, state,
+    installed: inst.installed, missing: inst.missing,
+    downloadable: hasDownloadableWeights(name),
+    onGpu: p?.on_gpu ?? null, loaded: p?.loaded ?? null,
+  }
 }
 
 export function readVram(): Promise<{ usedMiB: number; totalMiB: number } | null> {

@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { ENGINES, isEngine, startService, stopService, statusOf, readVram } from '../services/serviceManager'
+import { installWeights } from '../core/engineInstaller'
+import { setupSse } from '../utils/sse'
 
 const router = Router()
 
@@ -32,6 +34,24 @@ router.post('/:name/stop', async (req: Request, res: Response) => {
   if (!isEngine(name)) return res.status(404).json({ error: 'unknown service' })
   await stopService(name)
   res.json({ ok: true, state: 'stopped' })
+})
+
+// GET /api/services/:name/install — SSE stream of the weight download/extract.
+// EventSource is GET-only; closing it (client side) aborts the transfer, which
+// leaves resumable .part files behind. Weights come from the model's official
+// release; the venv is NOT installed here (guided step, see ENGINES.md).
+router.get('/:name/install', (req: Request, res: Response) => {
+  const { name } = req.params
+  if (!isEngine(name)) return res.status(404).json({ error: 'unknown service' })
+  const sse = setupSse(res)
+  const ac = new AbortController()
+  res.on('close', () => ac.abort())
+  installWeights(name, { signal: ac.signal, onProgress: (p) => sse.send(p) })
+    .then(() => { sse.send({ status: 'done', phase: 'done', pct: 100 }); sse.close() })
+    .catch((e) => {
+      if (!ac.signal.aborted) sse.send({ status: 'error', error: e instanceof Error ? e.message : String(e) })
+      sse.close()
+    })
 })
 
 export default router
