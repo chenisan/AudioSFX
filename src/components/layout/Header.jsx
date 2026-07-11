@@ -5,6 +5,8 @@ import { useRender } from '../../hooks/useRender'
 import RenderProgress from '../render/RenderProgress'
 import EngineControls from '../services/EngineControls'
 import AboutPanel from '../common/AboutPanel'
+import Screws from '../skeuo/Screws'
+import ampTex from '../../assets/textures/amp-panel-dark.png'
 
 // Spinning loader for icon buttons in a busy state (saving / rendering).
 function Spinner() {
@@ -230,22 +232,27 @@ function resolutionIdToQuality(resId) {
 function ExportAboutGate({ onClose, onNext }) {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-[#1a1a1a] border border-[#333] rounded-lg w-[480px] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="p-4 border-b border-[#2a2a2a] flex justify-between items-center">
-          <h2 className="font-medium text-white">關於作者</h2>
-          <button onClick={onClose} className="text-[#666] hover:text-white text-xl leading-none">×</button>
+      <div
+        className="amp-faceplate relative border border-black/70 rounded-lg w-[480px] flex flex-col overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.7)]"
+        style={{ '--amp-tex': `url(${ampTex})` }}
+        onClick={e => e.stopPropagation()}
+      >
+        <Screws />
+        <div className="amp-rail px-5 py-3 flex justify-between items-center">
+          <h2 className="text-[12px] font-semibold tracking-[0.2em] text-[#e8e2d6]" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>關於作者</h2>
+          <button onClick={onClose} className="text-[#8a8378] hover:text-white text-xl leading-none">×</button>
         </div>
         <div className="p-5">
           <AboutPanel />
         </div>
-        <div className="p-4 border-t border-[#2a2a2a] flex justify-end items-center gap-3">
+        <div className="p-4 border-t border-black/60 flex justify-end items-center gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 bg-[#2a2a2a] hover:bg-[#333] text-[#aaa] text-sm rounded"
+            className="px-4 py-1.5 rounded text-sm bg-black/30 border border-black/50 text-[#9a948b] hover:text-[#d8d2c6] hover:bg-black/20 transition-colors"
           >取消</button>
           <button
             onClick={onNext}
-            className="px-6 py-1.5 text-white text-sm rounded font-medium bg-[#6d5efc] hover:bg-[#5848e0]"
+            className="px-6 py-1.5 text-white text-sm rounded font-medium bg-[#6d5efc] hover:bg-[#5848e0] shadow-[0_0_12px_rgba(109,94,252,0.35)]"
           >下一步</button>
         </div>
       </div>
@@ -332,10 +339,16 @@ function ExportModal({ onRender, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
-      <div data-testid="export-modal" className="bg-[#1a1a1a] border border-[#333] rounded-lg w-[560px] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="p-4 border-b border-[#2a2a2a] flex justify-between items-center">
-          <h2 className="font-medium text-white">匯出</h2>
-          <button onClick={onClose} className="text-[#666] hover:text-white text-xl">×</button>
+      <div
+        data-testid="export-modal"
+        className="amp-faceplate relative border border-black/70 rounded-lg w-[560px] flex flex-col overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.7)]"
+        style={{ '--amp-tex': `url(${ampTex})` }}
+        onClick={e => e.stopPropagation()}
+      >
+        <Screws />
+        <div className="amp-rail px-5 py-3 flex justify-between items-center">
+          <h2 className="text-[12px] font-semibold tracking-[0.2em] text-[#e8e2d6]" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>匯出</h2>
+          <button onClick={onClose} className="text-[#8a8378] hover:text-white text-xl leading-none">×</button>
         </div>
 
         <div className="flex p-5 gap-5">
@@ -378,21 +391,21 @@ function ExportModal({ onRender, onClose }) {
             )}
 
             <div className="flex items-center gap-3">
-              <span className="text-[11px] text-[#666] w-20 shrink-0">輸出位置</span>
+              <span className="text-[11px] text-[#8a8378] tracking-[0.08em] w-20 shrink-0">輸出位置</span>
               <input
                 type="text"
                 value={outputDir}
                 onChange={e => setOutputDir(e.target.value)}
                 placeholder="預設 (專案資料夾)"
-                className="flex-1 bg-[#111] border border-[#333] rounded px-2 py-1 text-sm text-gray-300 placeholder-[#555] focus:outline-none focus:border-[#6d5efc]"
+                className="amp-inset flex-1 border border-black/60 rounded px-2 py-1 text-sm text-[#d8d2c6] placeholder-[#555] focus:outline-none focus:border-[#6d5efc]"
               />
             </div>
 
             <ExportRow label="編碼器">{formatInfo.codec}</ExportRow>
 
             <div className="flex items-center gap-3">
-              <span className="text-[11px] text-[#666] w-20 shrink-0">輸出範圍</span>
-              <span className="font-mono text-xs text-gray-300">
+              <span className="text-[11px] text-[#8a8378] tracking-[0.08em] w-20 shrink-0">輸出範圍</span>
+              <span className="font-mono text-xs text-[#d8d2c6]">
                 {fmtTime(startSec)} → {fmtTime(endSec)}
                 <span className="text-[#666] ml-2">({(endSec - startSec).toFixed(1)}s)</span>
               </span>
@@ -406,15 +419,15 @@ function ExportModal({ onRender, onClose }) {
           </div>
         </div>
 
-        <div className="p-4 border-t border-[#2a2a2a] flex justify-end items-center gap-3">
+        <div className="p-4 border-t border-black/60 flex justify-end items-center gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 bg-[#2a2a2a] hover:bg-[#333] text-[#aaa] text-sm rounded"
+            className="px-4 py-1.5 rounded text-sm bg-black/30 border border-black/50 text-[#9a948b] hover:text-[#d8d2c6] hover:bg-black/20 transition-colors"
           >取消</button>
           <button
             onClick={handleExport}
             data-testid="export-submit"
-            className="px-6 py-1.5 text-white text-sm rounded font-medium bg-[#6d5efc] hover:bg-[#5848e0]"
+            className="px-6 py-1.5 text-white text-sm rounded font-medium bg-[#6d5efc] hover:bg-[#5848e0] shadow-[0_0_12px_rgba(109,94,252,0.35)]"
           >匯出</button>
         </div>
       </div>
@@ -425,8 +438,8 @@ function ExportModal({ onRender, onClose }) {
 function ExportRow({ label, children }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-[11px] text-[#666] w-20 shrink-0">{label}</span>
-      <span className="text-sm text-[#ccc]">{children}</span>
+      <span className="text-[11px] text-[#8a8378] tracking-[0.08em] w-20 shrink-0">{label}</span>
+      <span className="text-sm text-[#d8d2c6]">{children}</span>
     </div>
   )
 }
@@ -434,12 +447,12 @@ function ExportRow({ label, children }) {
 function ExportSelect({ label, value, onChange, options, testId }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-[11px] text-[#666] w-20 shrink-0">{label}</span>
+      <span className="text-[11px] text-[#8a8378] tracking-[0.08em] w-20 shrink-0">{label}</span>
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
         data-testid={testId}
-        className="flex-1 bg-[#111] border border-[#333] rounded px-2 py-1 text-sm text-gray-300 focus:outline-none focus:border-[#6d5efc]"
+        className="amp-inset flex-1 border border-black/60 rounded px-2 py-1 text-sm text-[#d8d2c6] focus:outline-none focus:border-[#6d5efc]"
       >
         {options.map(o => (
           <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>
@@ -451,7 +464,7 @@ function ExportSelect({ label, value, onChange, options, testId }) {
 
 function AudioOnlyThumb() {
   return (
-    <div className="bg-[#252525] rounded border border-[#333] flex flex-col items-center justify-center text-[#666] w-full aspect-square gap-2">
+    <div className="amp-inset rounded border border-black/60 flex flex-col items-center justify-center text-[#666] w-full aspect-square gap-2">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.5">
         <path d="M9 18V5l12-2v13" />
         <circle cx="6" cy="18" r="3" />
@@ -481,14 +494,14 @@ function FirstFrameThumb({ project, ratio }) {
 
   if (!thumbSrc || err) {
     return (
-      <div className="bg-[#252525] rounded border border-[#333] flex items-center justify-center text-[#555] text-xs overflow-hidden" style={style}>
+      <div className="amp-inset rounded border border-black/60 flex items-center justify-center text-[#555] text-xs overflow-hidden" style={style}>
         {ratio.w}:{ratio.h}
       </div>
     )
   }
 
   return (
-    <div className="relative rounded border border-[#333] overflow-hidden bg-black" style={style}>
+    <div className="relative rounded border border-black/70 overflow-hidden bg-black shadow-[inset_0_2px_6px_rgba(0,0,0,0.8)]" style={style}>
       <img
         src={thumbSrc}
         alt="首幀預覽"
