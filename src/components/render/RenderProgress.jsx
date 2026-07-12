@@ -1,3 +1,6 @@
+import Screws from '../skeuo/Screws'
+import ampTex from '../../assets/textures/amp-panel-dark.png'
+
 // Detect GPU badge from first message containing known tag
 function gpuBadge(messages) {
   const first = messages.find(m => m.includes('NVENC') || m.includes('libx264'))
@@ -11,30 +14,35 @@ export default function RenderProgress({ rendering, progress, messages, outputUr
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-      <div className="bg-[#1a1a1a] border border-[#333] rounded-lg w-[480px] p-5 space-y-4">
+      <div
+        className="amp-faceplate relative border border-black/70 rounded-lg w-[480px] overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.7)]"
+        style={{ '--amp-tex': `url(${ampTex})` }}
+      >
+        <Screws />
+        <div className="p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h3 className="font-medium text-white">
+            <h3 className="text-sm font-semibold tracking-[0.12em] text-[#e8e2d6]" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>
               {rendering ? '渲染中...' : outputUrl ? '✅ 渲染完成' : '❌ 渲染失敗'}
             </h3>
             {gpuBadge(messages)}
           </div>
           {!rendering && (
-            <button onClick={onClose} className="text-[#666] hover:text-white text-xl leading-none">×</button>
+            <button onClick={onClose} className="text-[#8a8378] hover:text-white text-xl leading-none">×</button>
           )}
         </div>
 
         {/* Progress bar */}
-        <div className="bg-[#111] rounded-full h-2 overflow-hidden">
+        <div className="amp-inset rounded-full h-2.5 overflow-hidden border border-black/60">
           <div
-            className="h-full bg-[#6d5efc] transition-all duration-300"
+            className="h-full bg-[#6d5efc] transition-all duration-300 shadow-[0_0_8px_rgba(109,94,252,0.6)]"
             style={{ width: `${progress}%` }}
           />
         </div>
-        <div className="text-xs text-[#666] font-mono">{progress}%</div>
+        <div className="text-xs text-[#8a8378] font-mono">{progress}%</div>
 
         {/* Log */}
-        <div className="bg-[#111] rounded p-3 h-36 overflow-y-auto space-y-0.5">
+        <div className="amp-inset rounded border border-black/60 p-3 h-36 overflow-y-auto space-y-0.5">
           {messages.map((msg, i) => (
             <div key={i} className="text-xs text-[#888] font-mono">{msg}</div>
           ))}
@@ -59,7 +67,7 @@ export default function RenderProgress({ rendering, progress, messages, outputUr
             )}
             <button
               onClick={onClose}
-              className="px-4 py-1.5 bg-[#2a2a2a] hover:bg-[#333] text-[#aaa] text-sm rounded"
+              className="px-4 py-1.5 rounded text-sm bg-black/30 border border-black/50 text-[#9a948b] hover:text-[#d8d2c6] hover:bg-black/20 transition-colors"
             >
               關閉
             </button>
@@ -71,6 +79,7 @@ export default function RenderProgress({ rendering, progress, messages, outputUr
             {error}
           </div>
         )}
+        </div>
       </div>
     </div>
   )

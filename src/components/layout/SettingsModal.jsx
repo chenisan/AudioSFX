@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useProjectStore, ASPECT_RATIOS } from '../../stores/projectStore'
 import AboutPanel from '../common/AboutPanel'
+import Screws from '../skeuo/Screws'
+import ampTex from '../../assets/textures/amp-panel-dark.png'
 
 const TABS = [
   { id: 'project', label: '專案' },
@@ -72,23 +74,28 @@ export default function SettingsModal({ onClose, defaultTab = 'project' }) {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-[#1e1e1e] border border-[#333] rounded-lg w-[600px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div
+        className="amp-faceplate relative border border-black/70 rounded-lg w-[600px] max-h-[80vh] flex flex-col overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.7)]"
+        style={{ '--amp-tex': `url(${ampTex})` }}
+        onClick={e => e.stopPropagation()}
+      >
+        <Screws />
         {/* Header */}
-        <div className="px-5 py-3 border-b border-[#2a2a2a] flex justify-between items-center shrink-0">
-          <h2 className="font-medium text-white text-sm">設定</h2>
-          <button onClick={onClose} className="text-[#666] hover:text-white text-xl leading-none">×</button>
+        <div className="amp-rail px-5 py-3 flex justify-between items-center shrink-0">
+          <h2 className="text-[12px] font-semibold tracking-[0.2em] text-[#e8e2d6]" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>設定</h2>
+          <button onClick={onClose} className="text-[#8a8378] hover:text-white text-xl leading-none">×</button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-[#2a2a2a] shrink-0 px-5">
+        <div className="flex border-b border-black/60 shrink-0 px-5">
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`px-5 py-2.5 text-xs font-medium transition-colors ${
+              className={`px-5 py-2.5 text-xs font-medium tracking-[0.08em] transition-colors border-b-2 ${
                 tab === t.id
-                  ? 'text-white bg-[#333] rounded-t'
-                  : 'text-[#666] hover:text-[#aaa]'
+                  ? 'text-[#e8e2d6] border-[#6d5efc]'
+                  : 'text-[#8a8378] border-transparent hover:text-[#d8d2c6]'
               }`}
             >
               {t.label}
@@ -143,7 +150,7 @@ export default function SettingsModal({ onClose, defaultTab = 'project' }) {
               <SettingGroup label="儲存空間">
                 <div className="flex items-center justify-between py-1.5">
                   <span className="text-xs text-[#999]">將檔案儲存到</span>
-                  <span className="text-xs text-[#666] font-mono bg-[#111] border border-[#333] rounded px-2 py-1 max-w-[300px] truncate">
+                  <span className="amp-inset text-xs text-[#9a948b] font-mono border border-black/60 rounded px-2 py-1 max-w-[300px] truncate">
                     {storagePath}
                   </span>
                 </div>
@@ -181,17 +188,17 @@ export default function SettingsModal({ onClose, defaultTab = 'project' }) {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-[#2a2a2a] flex justify-end gap-3 shrink-0">
+        <div className="px-5 py-3 border-t border-black/60 flex justify-end gap-3 shrink-0">
           <button
             onClick={onClose}
-            className="px-6 py-1.5 bg-[#2a2a2a] hover:bg-[#333] text-[#aaa] text-sm rounded"
+            className="px-6 py-1.5 rounded text-sm bg-black/30 border border-black/50 text-[#9a948b] hover:text-[#d8d2c6] hover:bg-black/20 transition-colors"
           >
             取消
           </button>
           <button
             onClick={handleSave}
             disabled={!dirty || saving}
-            className="px-6 py-1.5 bg-[#6d5efc] hover:bg-[#5848e0] disabled:bg-[#333] disabled:text-[#555] text-white text-sm rounded font-medium transition-colors"
+            className="px-6 py-1.5 bg-[#6d5efc] hover:bg-[#5848e0] disabled:bg-[#333] disabled:text-[#555] disabled:shadow-none text-white text-sm rounded font-medium transition-colors shadow-[0_0_12px_rgba(109,94,252,0.35)]"
           >
             {saving ? '儲存中...' : '儲存'}
           </button>
@@ -303,8 +310,8 @@ function ProjInfoRow({ label, value, mono }) {
 function SettingGroup({ label, children }) {
   return (
     <div>
-      <div className="text-xs text-[#999] mb-3">{label}</div>
-      <div className="bg-[#252525] rounded-lg border border-[#333] px-4 py-2 divide-y divide-[#333]">
+      <div className="text-[11px] text-[#8a8378] tracking-[0.12em] mb-3">{label}</div>
+      <div className="amp-bezel px-4 py-2 divide-y divide-black/40">
         {children}
       </div>
     </div>
@@ -319,10 +326,10 @@ function CheckRow({ label, hint, checked, disabled, onChange }) {
         disabled={disabled}
         className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
           checked && !disabled
-            ? 'bg-[#6d5efc] border-[#6d5efc]'
+            ? 'bg-[#6d5efc] border-[#6d5efc] shadow-[0_0_8px_rgba(109,94,252,0.4)]'
             : disabled
               ? 'bg-[#222] border-[#333] cursor-not-allowed'
-              : 'bg-[#111] border-[#444] hover:border-[#666]'
+              : 'amp-inset border-black/60 hover:border-[#555]'
         }`}
       >
         {checked && (
