@@ -22,7 +22,7 @@ const CATEGORY_RULES: [string, RegExp][] = [
   ['槍械', /\b(gun|gunshot|rifle|pistol|shotgun|firearm|bullet|reload|ammo|machinegun|revolver|sniper|shots?|slug|magnum|caliber|calibre|gauge|casing|saiga|glock|beretta|mossberg)/],
   ['刀劍近戰', /\b(sword|blade|knife|slash|stab|machete|katana|melee)/],
   ['車輛引擎', /\b(car|cars|vehicle|engine|motor|driv|traffic|truck|motorcycle|race|racing|tyre|tire|brake|automobile|\bauto|onboard|on-board|idle|rpm|cadillac|fiat|porsche|ferrari|camaro|chevy|bus|train|tram|chassis)/],
-  ['撞擊破壞', /\b(impact|crash|destruction|destroy|smash|break|broke|shatter|collision|debris|demolition|bash|thud|wreck|crush|hit)/],
+  ['撞擊破壞', /\b(impact|crash|destruction|destroy|smash|break|broke|shatter|collision|debris|demolition|bash|thud|wreck|crush|hit|punch|fight|brawl)/],
   ['血腥 Gore', /\b(gore|flesh|skin|skinning|meat|bone|gristle|guts?|blood|splat|squelch|squish|cavity|\brip\b|sawing)/],
   ['警報警笛', /\b(siren|alarm|klaxon|whistle|honk|buzzer)/],
   ['腳步', /\b(footstep|footsteps|foot|walk|walking|running|jog|steps?)\b/],
