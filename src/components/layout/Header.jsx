@@ -233,19 +233,19 @@ function ExportAboutGate({ onClose, onNext }) {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="amp-faceplate relative border border-black/70 rounded-lg w-[480px] flex flex-col overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.7)]"
+        className="amp-faceplate relative border border-black/70 rounded-lg w-[480px] max-h-[90vh] flex flex-col overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.7)]"
         style={{ '--amp-tex': `url(${ampTex})` }}
         onClick={e => e.stopPropagation()}
       >
         <Screws />
-        <div className="amp-rail px-5 py-3 flex justify-between items-center">
+        <div className="amp-rail px-5 py-3 flex justify-between items-center shrink-0">
           <h2 className="text-[12px] font-semibold tracking-[0.2em] text-[#e8e2d6]" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>關於作者</h2>
           <button onClick={onClose} className="text-[#8a8378] hover:text-white text-xl leading-none">×</button>
         </div>
-        <div className="p-5">
+        <div className="p-5 overflow-y-auto min-h-0">
           <AboutPanel />
         </div>
-        <div className="p-4 border-t border-black/60 flex justify-end items-center gap-3">
+        <div className="p-4 border-t border-black/60 flex justify-end items-center gap-3 shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded text-sm bg-black/30 border border-black/50 text-[#9a948b] hover:text-[#d8d2c6] hover:bg-black/20 transition-colors"
@@ -341,17 +341,17 @@ function ExportModal({ onRender, onClose }) {
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
       <div
         data-testid="export-modal"
-        className="amp-faceplate relative border border-black/70 rounded-lg w-[560px] flex flex-col overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.7)]"
+        className="amp-faceplate relative border border-black/70 rounded-lg w-[560px] max-h-[90vh] flex flex-col overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.7)]"
         style={{ '--amp-tex': `url(${ampTex})` }}
         onClick={e => e.stopPropagation()}
       >
         <Screws />
-        <div className="amp-rail px-5 py-3 flex justify-between items-center">
+        <div className="amp-rail px-5 py-3 flex justify-between items-center shrink-0">
           <h2 className="text-[12px] font-semibold tracking-[0.2em] text-[#e8e2d6]" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>匯出</h2>
           <button onClick={onClose} className="text-[#8a8378] hover:text-white text-xl leading-none">×</button>
         </div>
 
-        <div className="flex p-5 gap-5">
+        <div className="flex p-5 gap-5 overflow-y-auto min-h-0">
           {/* Preview thumbnail */}
           <div className="flex items-center justify-center w-40 shrink-0">
             {audioOnly
