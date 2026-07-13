@@ -114,6 +114,96 @@ function buildReverbFilter(pr: any): string {
   return parts.join(',')
 }
 
+/** Delay/echo via aecho. aecho has no true feedback loop, so feedback is
+ * simulated with up to 8 decaying taps. MIRROR: audioEngine.js delay node uses
+ * a real DelayNode feedback loop — approximation, like reverb/comp. */
+function buildDelayFilter(pr: any): string {
+  const time = clampRange(Number(pr?.time), 1, 2000, 350)
+  const fb = clampRange(Number(pr?.feedback), 0, 95, 35) / 100
+  const mix = clampRange(Number(pr?.mix), 0, 100, 30) / 100
+  const delays: string[] = []
+  const decays: string[] = []
+  let level = mix
+  for (let i = 1; i <= 8; i++) {
+    if (time * i > 90000 || level < 0.02) break
+    delays.push(String(Math.round(time * i)))
+    decays.push(level.toFixed(3))
+    level *= fb
+  }
+  if (delays.length === 0) return 'anull'
+  return `aecho=1:1:${delays.join('|')}:${decays.join('|')}`
+}
+
+/** Distortion: pre-gain → asoftclip(atan) → tone lowpass → output gain.
+ * MIRROR: audioEngine.js WaveShaper(tanh) + lowpass + gain. Both bound the
+ * clipped signal near unity, so drive raises density more than level. */
+function buildDistortionFilter(pr: any): string {
+  const drive = clampRange(Number(pr?.drive), 0, 100, 40) / 100
+  const tone = clampRange(Number(pr?.tone), 0, 100, 60) / 100
+  const outDb = clampRange(Number(pr?.output), -24, 6, 0)
+  const pre = 1 + drive * 15                       // up to ~+24 dB into the clipper
+  const lp = Math.round(800 + tone * 15000)
+  return `volume=${pre.toFixed(3)},asoftclip=type=atan,lowpass=f=${lp},volume=${outDb.toFixed(1)}dB`
+}
+
+/** Resonant LP/HP/BP filter. MIRROR: audioEngine.js BiquadFilterNode — same
+ * mode/freq/Q semantics (width_type=q). */
+function buildFilterFilter(pr: any): string {
+  const mode = pr?.mode === 'highpass' ? 'highpass' : pr?.mode === 'bandpass' ? 'bandpass' : 'lowpass'
+  const freq = clampRange(Number(pr?.freq), 20, 20000, 1000)
+  const q = clampRange(Number(pr?.q), 0.1, 20, 0.7)
+  return `${mode}=f=${Math.round(freq)}:width_type=q:w=${q.toFixed(2)}`
+}
+
+/** Tremolo. MIRROR: audioEngine.js sine-LFO on a gain node with the same
+ * (1-d/2)+(d/2)·sin shape ffmpeg uses. */
+function buildTremoloFilter(pr: any): string {
+  const rate = clampRange(Number(pr?.rate), 0.1, 20, 5)
+  const depth = clampRange(Number(pr?.depth), 0, 100, 50) / 100
+  return `tremolo=f=${rate.toFixed(2)}:d=${depth.toFixed(2)}`
+}
+
+/** Chorus: single voice, 40 ms base delay modulated by rate/depth. decay ≈ wet
+ * level. MIRROR: audioEngine.js LFO-modulated DelayNode with the same base. */
+function buildChorusFilter(pr: any): string {
+  const rate = clampRange(Number(pr?.rate), 0.1, 5, 0.8)
+  const depth = clampRange(Number(pr?.depth), 0.5, 10, 3)
+  const mix = clampRange(Number(pr?.mix), 0, 100, 40) / 100
+  return `chorus=0.5:1:40:${(mix * 0.7).toFixed(3)}:${rate.toFixed(2)}:${depth.toFixed(1)}`
+}
+
+/** Flanger. width = wet mix %, regen = feedback %. MIRROR: audioEngine.js
+ * short LFO-modulated delay with a real feedback loop. */
+function buildFlangerFilter(pr: any): string {
+  const rate = clampRange(Number(pr?.rate), 0.1, 10, 0.5)
+  const depth = clampRange(Number(pr?.depth), 0.1, 10, 2)
+  const fb = clampRange(Number(pr?.feedback), 0, 90, 50)
+  const mix = clampRange(Number(pr?.mix), 0, 100, 60)
+  return `flanger=delay=1:depth=${depth.toFixed(1)}:regen=${Math.round(fb)}:width=${Math.round(mix)}:speed=${rate.toFixed(2)}`
+}
+
+/** Noise gate (downward expander). threshold dB → linear. MIRROR:
+ * audioEngine.js 'sfx-gate' AudioWorklet — same envelope semantics. */
+function buildGateFilter(pr: any): string {
+  const thrDb = clampRange(Number(pr?.threshold), -80, 0, -40)
+  const ratio = clampRange(Number(pr?.ratio), 1, 9, 4)
+  const attack = clampRange(Number(pr?.attack), 0.1, 100, 5)
+  const release = clampRange(Number(pr?.release), 10, 1000, 100)
+  const thr = Math.pow(10, thrDb / 20)
+  return `agate=threshold=${thr.toFixed(5)}:ratio=${ratio.toFixed(1)}:attack=${attack.toFixed(1)}:release=${release.toFixed(0)}`
+}
+
+/** Tape-style pitch shift, duration-preserving: normalise to 48 kHz →
+ * asetrate (pitch+speed) → aresample back → atempo undoes the speed change.
+ * ±12 semitones keeps atempo's factor inside [0.5, 2]. MIRROR: audioEngine.js
+ * 'sfx-pitch' AudioWorklet (granular, duration-preserving by nature). */
+function buildPitchFilters(pr: any): string[] {
+  const semi = clampRange(Number(pr?.semitones), -12, 12, 0)
+  if (Math.abs(semi) < 0.01) return []
+  const f = Math.pow(2, semi / 12)
+  return ['aresample=48000', `asetrate=${Math.round(48000 * f)}`, 'aresample=48000', ...buildAtempoChain(1 / f)]
+}
+
 // Master-bus brickwall limiter on the final mix. ceilingDb → linear limit.
 // MIRROR: src/audio/audioEngine.js `setMasterLimiter` is the preview-side twin
 // (Web Audio DynamicsCompressor with threshold = ceilingDb). Keep in sync.
@@ -137,6 +227,22 @@ function buildPluginFilters(plugins: any[]): string[] {
       out.push(buildLimiterFilter(p.params))
     } else if (p.type === 'reverb') {
       out.push(buildReverbFilter(p.params))
+    } else if (p.type === 'delay') {
+      out.push(buildDelayFilter(p.params))
+    } else if (p.type === 'distortion') {
+      out.push(buildDistortionFilter(p.params))
+    } else if (p.type === 'filter') {
+      out.push(buildFilterFilter(p.params))
+    } else if (p.type === 'tremolo') {
+      out.push(buildTremoloFilter(p.params))
+    } else if (p.type === 'chorus') {
+      out.push(buildChorusFilter(p.params))
+    } else if (p.type === 'flanger') {
+      out.push(buildFlangerFilter(p.params))
+    } else if (p.type === 'gate') {
+      out.push(buildGateFilter(p.params))
+    } else if (p.type === 'pitch') {
+      out.push(...buildPitchFilters(p.params))
     }
   }
   return out

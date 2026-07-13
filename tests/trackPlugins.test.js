@@ -115,7 +115,32 @@ describe('makePlugin 工廠', () => {
     expect(makePlugin('eq')?.type).toBe('eq')
     expect(makePlugin('compressor')?.type).toBe('compressor')
     expect(makePlugin('limiter')?.type).toBe('limiter')
-    expect(makePlugin('reverb')).toBeNull()
+    expect(makePlugin('reverb')?.type).toBe('reverb')
+    expect(makePlugin('nope')).toBeNull()
+  })
+
+  it('SFX 型態都有工廠，預設值鏡像 ffmpegBuilder 端', () => {
+    const sfx = ['delay', 'distortion', 'filter', 'tremolo', 'chorus', 'flanger', 'gate', 'pitch']
+    for (const t of sfx) {
+      const p = makePlugin(t)
+      expect(p?.type).toBe(t)
+      expect(p?.enabled).toBe(true)
+      expect(p?.id).toBeTruthy()
+    }
+    expect(makePlugin('delay').params).toEqual({ time: 350, feedback: 35, mix: 30 })
+    expect(makePlugin('distortion').params).toEqual({ drive: 40, tone: 60, output: 0 })
+    expect(makePlugin('filter').params).toEqual({ mode: 'lowpass', freq: 1000, q: 0.7 })
+    expect(makePlugin('tremolo').params).toEqual({ rate: 5, depth: 50 })
+    expect(makePlugin('chorus').params).toEqual({ rate: 0.8, depth: 3, mix: 40 })
+    expect(makePlugin('flanger').params).toEqual({ rate: 0.5, depth: 2, feedback: 50, mix: 60 })
+    expect(makePlugin('gate').params).toEqual({ threshold: -40, ratio: 4, attack: 5, release: 100 })
+    expect(makePlugin('pitch').params).toEqual({ semitones: 0 })
+  })
+
+  it('makePlugin 每次回新的 params 物件（不共用預設）', () => {
+    const a = makePlugin('delay'), b = makePlugin('delay')
+    a.params.time = 999
+    expect(b.params.time).toBe(350)
   })
 
   it('每次產生的 id 不重複', () => {
@@ -125,7 +150,10 @@ describe('makePlugin 工廠', () => {
 })
 
 describe('PLUGIN_LABELS', () => {
-  it('涵蓋全部三種型態', () => {
-    expect(Object.keys(PLUGIN_LABELS).sort()).toEqual(['compressor', 'eq', 'limiter'])
+  it('涵蓋全部 12 種型態', () => {
+    expect(Object.keys(PLUGIN_LABELS).sort()).toEqual([
+      'chorus', 'compressor', 'delay', 'distortion', 'eq', 'filter',
+      'flanger', 'gate', 'limiter', 'pitch', 'reverb', 'tremolo',
+    ])
   })
 })

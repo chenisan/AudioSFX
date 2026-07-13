@@ -4,7 +4,16 @@ import { getPlugins, makePlugin, PLUGIN_LABELS } from '../../utils/trackPlugins'
 import TrackEqPanel from './TrackEqPanel'
 import TrackDynamicsPanel from './TrackDynamicsPanel'
 import TrackReverbPanel from './TrackReverbPanel'
+import TrackSimpleFxPanel, { SIMPLE_FX_SPECS } from './TrackSimpleFxPanel'
 import FloatingWindow from './FloatingWindow'
+
+// "add effect" menu order + floating editor widths.
+const ADD_MENU = ['eq', 'compressor', 'limiter', 'reverb', 'delay', 'distortion', 'filter', 'tremolo', 'chorus', 'flanger', 'gate', 'pitch']
+const EDITOR_WIDTHS = {
+  eq: 480, reverb: 620, compressor: 560, limiter: 260,
+  delay: 380, distortion: 380, filter: 320, tremolo: 300,
+  chorus: 380, flanger: 460, gate: 460, pitch: 280,
+}
 
 // Track effect-chain editor (rendered inline in the left column "效果" tab).
 // Owns the track.plugins array and ALL persistence; child param panels
@@ -105,15 +114,13 @@ export default function TrackFxEditor({ track }) {
           + 加效果
         </button>
         {showAdd && (
-          <div className="absolute left-0 top-full mt-1 w-full bg-[#2a2a2a] border border-[#444] rounded shadow-lg z-50 py-1">
-            <button onClick={() => add('eq')}
-              className="w-full text-left text-[11px] px-2 py-1 text-[#ccc] hover:bg-[#3a3a3a]">EQ（5-band）</button>
-            <button onClick={() => add('compressor')}
-              className="w-full text-left text-[11px] px-2 py-1 text-[#ccc] hover:bg-[#3a3a3a]">壓縮器</button>
-            <button onClick={() => add('limiter')}
-              className="w-full text-left text-[11px] px-2 py-1 text-[#ccc] hover:bg-[#3a3a3a]">限幅器</button>
-            <button onClick={() => add('reverb')}
-              className="w-full text-left text-[11px] px-2 py-1 text-[#ccc] hover:bg-[#3a3a3a]">殘響（Reverb）</button>
+          <div className="absolute left-0 top-full mt-1 w-full bg-[#2a2a2a] border border-[#444] rounded shadow-lg z-50 py-1 max-h-64 overflow-y-auto">
+            {ADD_MENU.map(t => (
+              <button key={t} onClick={() => add(t)}
+                className="w-full text-left text-[11px] px-2 py-1 text-[#ccc] hover:bg-[#3a3a3a]">
+                {PLUGIN_LABELS[t] ?? t}
+              </button>
+            ))}
           </div>
         )}
       </div>
@@ -127,7 +134,7 @@ export default function TrackFxEditor({ track }) {
           <FloatingWindow
             title={`${track.name} · ${PLUGIN_LABELS[editing.type] ?? editing.type}`}
             onClose={() => setEditingId(null)}
-            width={editing.type === 'eq' ? 480 : editing.type === 'reverb' ? 620 : editing.type === 'compressor' ? 560 : editing.type === 'limiter' ? 260 : 300}
+            width={EDITOR_WIDTHS[editing.type] ?? 300}
             initialX={380}
             initialY={130}
           >
@@ -139,6 +146,12 @@ export default function TrackFxEditor({ track }) {
               />
             ) : editing.type === 'reverb' ? (
               <TrackReverbPanel
+                params={editing.params ?? {}}
+                onChange={(params, persist) => setParams(editing.id, params, persist)}
+              />
+            ) : SIMPLE_FX_SPECS[editing.type] ? (
+              <TrackSimpleFxPanel
+                type={editing.type}
                 params={editing.params ?? {}}
                 onChange={(params, persist) => setParams(editing.id, params, persist)}
               />

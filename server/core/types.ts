@@ -239,7 +239,10 @@ export interface TrackEq {
 // Preview = Web Audio nodes (audioEngine.js); render = ffmpeg filters
 // (ffmpegBuilder.ts). Per plugin: `enabled` is the single on/off source of truth
 // (the params object holds no enabled flag).
-export type TrackPluginType = 'eq' | 'compressor' | 'limiter' | 'reverb'
+export type TrackPluginType =
+  | 'eq' | 'compressor' | 'limiter' | 'reverb'
+  | 'delay' | 'distortion' | 'filter' | 'tremolo'
+  | 'chorus' | 'flanger' | 'gate' | 'pitch'
 
 export interface EqPluginParams {
   bands: TrackEqBand[]   // fixed 5-band parametric
@@ -267,7 +270,51 @@ export interface ReverbPluginParams {
   width: number       // 0–100 %    (stereo spread)
   mix: number         // 0–100 %    (wet / dry)
 }
-export type TrackPluginParams = EqPluginParams | CompressorPluginParams | LimiterPluginParams | ReverbPluginParams
+// ── SFX-oriented effects (2026-07). All mirrored preview↔export like the rest. ──
+export interface DelayPluginParams {
+  time: number       // 1–2000 ms   (echo spacing)
+  feedback: number   // 0–95 %      (repeat decay)
+  mix: number        // 0–100 %     (wet level)
+}
+export interface DistortionPluginParams {
+  drive: number      // 0–100 %     (pre-gain into the clipper)
+  tone: number       // 0–100 %     (post lowpass: dark → bright)
+  output: number     // -24–+6 dB   (post gain)
+}
+export interface FilterPluginParams {
+  mode: 'lowpass' | 'highpass' | 'bandpass'
+  freq: number       // 20–20000 Hz
+  q: number          // 0.1–20
+}
+export interface TremoloPluginParams {
+  rate: number       // 0.1–20 Hz
+  depth: number      // 0–100 %
+}
+export interface ChorusPluginParams {
+  rate: number       // 0.1–5 Hz
+  depth: number      // 0.5–10 ms   (delay modulation swing)
+  mix: number        // 0–100 %
+}
+export interface FlangerPluginParams {
+  rate: number       // 0.1–10 Hz
+  depth: number      // 0.1–10 ms
+  feedback: number   // 0–90 %      (regen)
+  mix: number        // 0–100 %
+}
+export interface GatePluginParams {
+  threshold: number  // -80–0 dB
+  ratio: number      // 1–9 (expander slope)
+  attack: number     // 0.1–100 ms
+  release: number    // 10–1000 ms
+}
+export interface PitchPluginParams {
+  semitones: number  // -12–+12 (tape-style: formants shift with pitch)
+}
+
+export type TrackPluginParams =
+  | EqPluginParams | CompressorPluginParams | LimiterPluginParams | ReverbPluginParams
+  | DelayPluginParams | DistortionPluginParams | FilterPluginParams | TremoloPluginParams
+  | ChorusPluginParams | FlangerPluginParams | GatePluginParams | PitchPluginParams
 
 export interface TrackPlugin {
   id: string                   // stable id (used for reorder / remove)

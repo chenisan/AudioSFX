@@ -81,12 +81,28 @@ export function makeReverbPlugin() {
   }
 }
 
+// SFX effect defaults. MIRROR: ranges/defaults match server/core/types.ts and
+// ffmpegBuilder.ts / audioEngine.js param clamps.
+const SFX_DEFAULTS = {
+  delay:      { time: 350, feedback: 35, mix: 30 },
+  distortion: { drive: 40, tone: 60, output: 0 },
+  filter:     { mode: 'lowpass', freq: 1000, q: 0.7 },
+  tremolo:    { rate: 5, depth: 50 },
+  chorus:     { rate: 0.8, depth: 3, mix: 40 },
+  flanger:    { rate: 0.5, depth: 2, feedback: 50, mix: 60 },
+  gate:       { threshold: -40, ratio: 4, attack: 5, release: 100 },
+  pitch:      { semitones: 0 },
+}
+
 // type → factory, for the "add effect" menu.
 export function makePlugin(type) {
   if (type === 'eq') return makeEqPlugin()
   if (type === 'compressor') return makeCompressorPlugin()
   if (type === 'limiter') return makeLimiterPlugin()
   if (type === 'reverb') return makeReverbPlugin()
+  if (SFX_DEFAULTS[type]) {
+    return { id: newPluginId(type), type, enabled: true, params: { ...SFX_DEFAULTS[type] } }
+  }
   return null
 }
 
@@ -95,4 +111,12 @@ export const PLUGIN_LABELS = {
   compressor: '壓縮器',
   limiter: '限幅器',
   reverb: '殘響',
+  delay: '回聲 Delay',
+  distortion: '破音 Distortion',
+  filter: '濾波器 Filter',
+  tremolo: '顫音 Tremolo',
+  chorus: '合唱 Chorus',
+  flanger: '鑲邊 Flanger',
+  gate: '噪音閘 Gate',
+  pitch: '變調 Pitch',
 }

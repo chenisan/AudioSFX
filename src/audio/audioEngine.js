@@ -43,6 +43,94 @@ function gainAtPos(target, pos, dur, fIn, fOut) {
   return Math.max(0, g)
 }
 
+// AudioWorklet processors for the two effects Web Audio has no native node for:
+// noise gate (downward expander) and granular pitch shift. Loaded as an inline
+// blob module by _loadWorklets(). MIRROR: ffmpegBuilder buildGateFilter (agate)
+// and buildPitchFilters (asetrate+atempo) — approximations, like comp/limiter.
+const WORKLET_SRC = `
+class SfxGate extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    return [
+      { name: 'threshold', defaultValue: -40, minValue: -80, maxValue: 0 },
+      { name: 'ratio', defaultValue: 4, minValue: 1, maxValue: 9 },
+      { name: 'attack', defaultValue: 5, minValue: 0.1, maxValue: 100 },
+      { name: 'release', defaultValue: 100, minValue: 10, maxValue: 1000 },
+    ]
+  }
+  constructor() { super(); this._env = 0; this._gain = 1 }
+  process(inputs, outputs, params) {
+    const input = inputs[0], output = outputs[0]
+    if (!input || input.length === 0) return true
+    const thr = Math.pow(10, params.threshold[0] / 20)
+    const ratio = params.ratio[0]
+    const aC = Math.exp(-1 / (sampleRate * Math.max(0.0001, params.attack[0] / 1000)))
+    const rC = Math.exp(-1 / (sampleRate * Math.max(0.001, params.release[0] / 1000)))
+    const envC = Math.exp(-1 / (sampleRate * 0.005))
+    const n = output[0].length
+    for (let i = 0; i < n; i++) {
+      let peak = 0
+      for (let c = 0; c < input.length; c++) { const v = Math.abs(input[c][i]); if (v > peak) peak = v }
+      this._env = peak > this._env ? peak : this._env * envC
+      let target = 1
+      if (this._env < thr) {
+        target = Math.pow(this._env / thr, ratio - 1)
+        if (!(target > 0.001)) target = 0
+      }
+      this._gain = target + (this._gain - target) * (target > this._gain ? aC : rC)
+      for (let c = 0; c < output.length; c++) {
+        const src = input[Math.min(c, input.length - 1)]
+        output[c][i] = src[i] * this._gain
+      }
+    }
+    return true
+  }
+}
+// Granular (dual sawtooth tap) pitch shifter on a ring buffer. Two read taps
+// chase the write head at 'ratio' speed, sine-windowed (equal-power) and half
+// a grain out of phase so the tap-reset click is always in the silent tap.
+class SfxPitch extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    return [{ name: 'semitones', defaultValue: 0, minValue: -12, maxValue: 12 }]
+  }
+  constructor() { super(); this._size = 1 << 15; this._buf = null; this._w = 0; this._phase = 0 }
+  _rd(b, pos) {
+    const size = this._size
+    pos = ((pos % size) + size) % size
+    const i0 = pos | 0, fr = pos - i0
+    return b[i0] * (1 - fr) + b[(i0 + 1) % size] * fr
+  }
+  process(inputs, outputs, params) {
+    const input = inputs[0], output = outputs[0]
+    if (!input || input.length === 0) return true
+    const ch = input.length
+    if (!this._buf || this._buf.length !== ch) {
+      this._buf = []; for (let c = 0; c < ch; c++) this._buf.push(new Float32Array(this._size))
+      this._w = 0; this._phase = 0
+    }
+    const ratio = Math.pow(2, params.semitones[0] / 12)
+    const G = Math.floor(sampleRate * 0.1)          // 100 ms grain
+    const inc = (1 - ratio) / G
+    const n = output[0].length
+    for (let i = 0; i < n; i++) {
+      for (let c = 0; c < ch; c++) this._buf[c][this._w] = input[c][i]
+      this._phase += inc
+      this._phase -= Math.floor(this._phase)
+      const p1 = this._phase, p2 = (this._phase + 0.5) % 1
+      const d1 = 2 + p1 * G, d2 = 2 + p2 * G
+      const g1 = Math.sin(Math.PI * p1), g2 = Math.sin(Math.PI * p2)
+      for (let c = 0; c < output.length; c++) {
+        const b = this._buf[Math.min(c, ch - 1)]
+        output[c][i] = this._rd(b, this._w - d1) * g1 + this._rd(b, this._w - d2) * g2
+      }
+      this._w = (this._w + 1) % this._size
+    }
+    return true
+  }
+}
+registerProcessor('sfx-gate', SfxGate)
+registerProcessor('sfx-pitch', SfxPitch)
+`
+
 class AudioEngine {
   constructor() {
     this.ctx = null
@@ -100,6 +188,8 @@ class AudioEngine {
     if (this.ctx) return
     const Ctor = window.AudioContext || window.webkitAudioContext
     this.ctx = new Ctor({ latencyHint: 'interactive' })
+    this._workletReady = false
+    this._loadWorklets()
     this.masterGain = this.ctx.createGain()
     this.masterGain.gain.value = 1
 
@@ -219,9 +309,33 @@ class AudioEngine {
     }
   }
 
+  // Load the AudioWorklet processors backing gate/pitch (inline blob — no asset
+  // pipeline). Until the module resolves those plugins render as pass-through;
+  // on load, every bus chain containing one is rebuilt with the real node.
+  _loadWorklets() {
+    if (!this.ctx?.audioWorklet) return
+    const url = URL.createObjectURL(new Blob([WORKLET_SRC], { type: 'application/javascript' }))
+    this.ctx.audioWorklet.addModule(url)
+      .then(() => {
+        this._workletReady = true
+        for (const [tid, bus] of this.trackBuses) {
+          const plugins = this._trackPlugins?.get(tid) || []
+          if (plugins.some(p => p?.enabled && (p.type === 'gate' || p.type === 'pitch'))) {
+            bus.pluginKey = null
+            this._applyBusPlugins(bus, plugins)
+          }
+        }
+      })
+      .catch((e) => { console.warn('[audioEngine] worklet load failed — gate/pitch preview bypassed', e) })
+      .finally(() => URL.revokeObjectURL(url))
+  }
+
   _rebuildBusChain(bus, enabled) {
     try { bus.input.disconnect() } catch {}
-    for (const pn of bus.pluginNodes) for (const n of pn.nodes) { try { n.disconnect() } catch {} }
+    for (const pn of bus.pluginNodes) for (const n of pn.nodes) {
+      try { n.disconnect() } catch {}
+      try { if (typeof n.stop === 'function') n.stop() } catch {}   // LFO oscillators
+    }
     bus.pluginNodes = []
     let tail = bus.input
     for (const p of enabled) {
@@ -303,8 +417,120 @@ class AudioEngine {
         refs: { wet, pre, conv, thick, space, character, brightness, width },
       }
     }
+    if (p.type === 'delay') {
+      // input → dry → out  +  input → delay(⟲feedback) → wet → out.
+      // MIRROR: ffmpegBuilder buildDelayFilter (aecho decaying-tap approximation).
+      const pr = p.params || {}
+      const input = ctx.createGain(), output = ctx.createGain()
+      const dry = ctx.createGain(); dry.gain.value = 1
+      const wet = ctx.createGain(); wet.gain.value = clampNum(num(pr.mix, 30), 0, 100) / 100
+      const dl = ctx.createDelay(2.1); dl.delayTime.value = clampNum(num(pr.time, 350), 1, 2000) / 1000
+      const fbg = ctx.createGain(); fbg.gain.value = clampNum(num(pr.feedback, 35), 0, 95) / 100
+      input.connect(dry); dry.connect(output)
+      input.connect(dl); dl.connect(wet); wet.connect(output)
+      dl.connect(fbg); fbg.connect(dl)
+      return { nodes: [input, output, dry, wet, dl, fbg], entry: input, exit: output, refs: { dl, fbg, wet } }
+    }
+    if (p.type === 'distortion') {
+      // WaveShaper(atan drive curve) → tone lowpass → output gain.
+      // MIRROR: ffmpegBuilder buildDistortionFilter (volume→asoftclip=atan→lowpass→volume).
+      const pr = p.params || {}
+      const drive = clampNum(num(pr.drive, 40), 0, 100) / 100
+      const ws = ctx.createWaveShaper(); ws.curve = this._makeDriveCurve(drive); ws.oversample = '4x'
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'
+      lp.frequency.value = 800 + (clampNum(num(pr.tone, 60), 0, 100) / 100) * 15000
+      const out = ctx.createGain(); out.gain.value = dbToLin(clampNum(num(pr.output, 0), -24, 6))
+      ws.connect(lp); lp.connect(out)
+      return { nodes: [ws, lp, out], entry: ws, exit: out, refs: { ws, lp, out, drive } }
+    }
+    if (p.type === 'filter') {
+      // MIRROR: ffmpegBuilder buildFilterFilter (lowpass/highpass/bandpass width_type=q).
+      const pr = p.params || {}
+      const f = ctx.createBiquadFilter()
+      f.type = pr.mode === 'highpass' ? 'highpass' : pr.mode === 'bandpass' ? 'bandpass' : 'lowpass'
+      f.frequency.value = clampNum(num(pr.freq, 1000), 20, 20000)
+      f.Q.value = clampNum(num(pr.q, 0.7), 0.1, 20)
+      return { nodes: [f], entry: f, exit: f, refs: { f } }
+    }
+    if (p.type === 'tremolo') {
+      // Gain with sine LFO: (1-d/2) + (d/2)·sin — same shape as ffmpeg tremolo.
+      const pr = p.params || {}
+      const depth = clampNum(num(pr.depth, 50), 0, 100) / 100
+      const g = ctx.createGain(); g.gain.value = 1 - depth / 2
+      const osc = ctx.createOscillator(); osc.type = 'sine'
+      osc.frequency.value = clampNum(num(pr.rate, 5), 0.1, 20)
+      const lfoG = ctx.createGain(); lfoG.gain.value = depth / 2
+      osc.connect(lfoG); lfoG.connect(g.gain); osc.start()
+      return { nodes: [g, osc, lfoG], entry: g, exit: g, refs: { g, osc, lfoG } }
+    }
+    if (p.type === 'chorus') {
+      // 40 ms base delay, LFO-modulated ±depth/2, mixed at mix·0.7.
+      // MIRROR: ffmpegBuilder buildChorusFilter (same base/decay mapping).
+      const pr = p.params || {}
+      const depth = clampNum(num(pr.depth, 3), 0.5, 10) / 1000
+      const input = ctx.createGain(), output = ctx.createGain()
+      const dry = ctx.createGain(); dry.gain.value = 1
+      const wet = ctx.createGain(); wet.gain.value = (clampNum(num(pr.mix, 40), 0, 100) / 100) * 0.7
+      const dl = ctx.createDelay(0.1); dl.delayTime.value = 0.04
+      const osc = ctx.createOscillator(); osc.type = 'sine'
+      osc.frequency.value = clampNum(num(pr.rate, 0.8), 0.1, 5)
+      const lfoG = ctx.createGain(); lfoG.gain.value = depth / 2
+      osc.connect(lfoG); lfoG.connect(dl.delayTime); osc.start()
+      input.connect(dry); dry.connect(output)
+      input.connect(dl); dl.connect(wet); wet.connect(output)
+      return { nodes: [input, output, dry, wet, dl, osc, lfoG], entry: input, exit: output, refs: { dl, osc, lfoG, wet } }
+    }
+    if (p.type === 'flanger') {
+      // ~1 ms base delay, LFO swing = depth, real feedback loop.
+      // MIRROR: ffmpegBuilder buildFlangerFilter (delay=1:depth:regen:width:speed).
+      const pr = p.params || {}
+      const depth = clampNum(num(pr.depth, 2), 0.1, 10) / 1000
+      const input = ctx.createGain(), output = ctx.createGain()
+      const dry = ctx.createGain(); dry.gain.value = 1
+      const wet = ctx.createGain(); wet.gain.value = clampNum(num(pr.mix, 60), 0, 100) / 100
+      const dl = ctx.createDelay(0.05); dl.delayTime.value = 0.001 + depth / 2
+      const fbg = ctx.createGain(); fbg.gain.value = clampNum(num(pr.feedback, 50), 0, 90) / 100
+      const osc = ctx.createOscillator(); osc.type = 'sine'
+      osc.frequency.value = clampNum(num(pr.rate, 0.5), 0.1, 10)
+      const lfoG = ctx.createGain(); lfoG.gain.value = depth / 2
+      osc.connect(lfoG); lfoG.connect(dl.delayTime); osc.start()
+      input.connect(dry); dry.connect(output)
+      input.connect(dl); dl.connect(wet); wet.connect(output)
+      dl.connect(fbg); fbg.connect(dl)
+      return { nodes: [input, output, dry, wet, dl, fbg, osc, lfoG], entry: input, exit: output, refs: { dl, fbg, osc, lfoG, wet } }
+    }
+    if (p.type === 'gate' || p.type === 'pitch') {
+      // AudioWorklet-backed. Pass-through until the module loads (then
+      // _loadWorklets rebuilds this chain). MIRROR: ffmpegBuilder buildGateFilter
+      // (agate) / buildPitchFilters (asetrate+atempo).
+      if (!this._workletReady) { const g = ctx.createGain(); return { nodes: [g], entry: g, exit: g, refs: {} } }
+      const node = new AudioWorkletNode(ctx, p.type === 'gate' ? 'sfx-gate' : 'sfx-pitch')
+      const pr = p.params || {}
+      if (p.type === 'gate') {
+        node.parameters.get('threshold').value = clampNum(num(pr.threshold, -40), -80, 0)
+        node.parameters.get('ratio').value = clampNum(num(pr.ratio, 4), 1, 9)
+        node.parameters.get('attack').value = clampNum(num(pr.attack, 5), 0.1, 100)
+        node.parameters.get('release').value = clampNum(num(pr.release, 100), 10, 1000)
+      } else {
+        node.parameters.get('semitones').value = clampNum(num(pr.semitones, 0), -12, 12)
+      }
+      return { nodes: [node], entry: node, exit: node, refs: { wn: node } }
+    }
     const g = ctx.createGain()
     return { nodes: [g], entry: g, exit: g, refs: {} }
+  }
+
+  // atan drive curve for the distortion WaveShaper. MIRROR: ffmpeg
+  // volume=pre → asoftclip=atan (same pre-gain law: 1 + drive·15).
+  _makeDriveCurve(drive) {
+    const pre = 1 + drive * 15
+    const n = 1024
+    const curve = new Float32Array(n)
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1
+      curve[i] = Math.atan(pre * x) * (2 / Math.PI)
+    }
+    return curve
   }
 
   // Synthesise a stereo reverb impulse. space→length; character→decay
@@ -375,6 +601,54 @@ class AudioEngine {
             pn.refs.space = space; pn.refs.character = character
             pn.refs.brightness = brightness; pn.refs.width = width
           }
+        } else if (p.type === 'delay') {
+          const pr = p.params || {}
+          pn.refs.dl.delayTime.setTargetAtTime(clampNum(num(pr.time, 350), 1, 2000) / 1000, now, tc)
+          pn.refs.fbg.gain.setTargetAtTime(clampNum(num(pr.feedback, 35), 0, 95) / 100, now, tc)
+          pn.refs.wet.gain.setTargetAtTime(clampNum(num(pr.mix, 30), 0, 100) / 100, now, tc)
+        } else if (p.type === 'distortion') {
+          const pr = p.params || {}
+          const drive = clampNum(num(pr.drive, 40), 0, 100) / 100
+          if (Math.abs(pn.refs.drive - drive) > 0.005) {
+            pn.refs.ws.curve = this._makeDriveCurve(drive)
+            pn.refs.drive = drive
+          }
+          pn.refs.lp.frequency.setTargetAtTime(800 + (clampNum(num(pr.tone, 60), 0, 100) / 100) * 15000, now, tc)
+          pn.refs.out.gain.setTargetAtTime(dbToLin(clampNum(num(pr.output, 0), -24, 6)), now, tc)
+        } else if (p.type === 'filter') {
+          const pr = p.params || {}
+          pn.refs.f.type = pr.mode === 'highpass' ? 'highpass' : pr.mode === 'bandpass' ? 'bandpass' : 'lowpass'
+          pn.refs.f.frequency.setTargetAtTime(clampNum(num(pr.freq, 1000), 20, 20000), now, tc)
+          pn.refs.f.Q.setTargetAtTime(clampNum(num(pr.q, 0.7), 0.1, 20), now, tc)
+        } else if (p.type === 'tremolo') {
+          const pr = p.params || {}
+          const depth = clampNum(num(pr.depth, 50), 0, 100) / 100
+          pn.refs.osc.frequency.setTargetAtTime(clampNum(num(pr.rate, 5), 0.1, 20), now, tc)
+          pn.refs.lfoG.gain.setTargetAtTime(depth / 2, now, tc)
+          pn.refs.g.gain.setTargetAtTime(1 - depth / 2, now, tc)
+        } else if (p.type === 'chorus') {
+          const pr = p.params || {}
+          pn.refs.osc.frequency.setTargetAtTime(clampNum(num(pr.rate, 0.8), 0.1, 5), now, tc)
+          pn.refs.lfoG.gain.setTargetAtTime((clampNum(num(pr.depth, 3), 0.5, 10) / 1000) / 2, now, tc)
+          pn.refs.wet.gain.setTargetAtTime((clampNum(num(pr.mix, 40), 0, 100) / 100) * 0.7, now, tc)
+        } else if (p.type === 'flanger') {
+          const pr = p.params || {}
+          const depth = clampNum(num(pr.depth, 2), 0.1, 10) / 1000
+          pn.refs.osc.frequency.setTargetAtTime(clampNum(num(pr.rate, 0.5), 0.1, 10), now, tc)
+          pn.refs.dl.delayTime.setTargetAtTime(0.001 + depth / 2, now, tc)
+          pn.refs.lfoG.gain.setTargetAtTime(depth / 2, now, tc)
+          pn.refs.fbg.gain.setTargetAtTime(clampNum(num(pr.feedback, 50), 0, 90) / 100, now, tc)
+          pn.refs.wet.gain.setTargetAtTime(clampNum(num(pr.mix, 60), 0, 100) / 100, now, tc)
+        } else if (p.type === 'gate' && pn.refs.wn) {
+          const pr = p.params || {}
+          const ps = pn.refs.wn.parameters
+          ps.get('threshold').setTargetAtTime(clampNum(num(pr.threshold, -40), -80, 0), now, tc)
+          ps.get('ratio').setTargetAtTime(clampNum(num(pr.ratio, 4), 1, 9), now, tc)
+          ps.get('attack').setTargetAtTime(clampNum(num(pr.attack, 5), 0.1, 100), now, tc)
+          ps.get('release').setTargetAtTime(clampNum(num(pr.release, 100), 10, 1000), now, tc)
+        } else if (p.type === 'pitch' && pn.refs.wn) {
+          const pr = p.params || {}
+          pn.refs.wn.parameters.get('semitones').setTargetAtTime(clampNum(num(pr.semitones, 0), -12, 12), now, tc)
         }
       } catch {}
     }
