@@ -11,22 +11,29 @@ import { getAssetDir } from './projectManager'
 import { getMediaInfo } from '../utils/ffprobe'
 
 const AUDIO = new Set(['.wav', '.aif', '.aiff', '.mp3', '.ogg', '.flac', '.m4a', '.aac'])
-const MAX_ITEMS = 8000   // cap JSON size for huge libraries (e.g. full Sonniss archive)
+const MAX_ITEMS = 20000  // cap JSON size for huge libraries (Sonniss + ODEON + 電影感庫 ~9k+)
 
 // Content-based Chinese category from English keywords in the filename/folder.
 // Local packs (Sonniss etc.) group by CONTRIBUTOR name ("Coll Anderson - Battle
 // Crowd"), which says nothing about the sound type — so we re-tag by keywords.
 // Order = priority: more specific first (爆炸/槍械/車輛 before generic 撞擊/環境).
 const CATEGORY_RULES: [string, RegExp][] = [
+  // Top priority: "stinger" in a filename is an explicit tag (our curated
+  // 戲劇點綴 files are all prefixed stinger-), so it must beat every
+  // content-keyword rule below (hit/laugh/gong… would otherwise steal them).
+  ['戲劇點綴', /\b(stinger|sting\b|rimshot|badum|ba-?dum|airhorn|trombone|gong|opera-?drum)/],
   ['爆炸', /\b(explosion|explos|blast|detonat|bomb|kaboom)/],
   ['槍械', /\b(gun|gunshot|rifle|pistol|shotgun|firearm|bullet|reload|ammo|machinegun|revolver|sniper|shots?|slug|magnum|caliber|calibre|gauge|casing|saiga|glock|beretta|mossberg)/],
   ['刀劍近戰', /\b(sword|blade|knife|slash|stab|machete|katana|melee)/],
-  ['車輛引擎', /\b(car|cars|vehicle|engine|motor|driv|traffic|truck|motorcycle|race|racing|tyre|tire|brake|automobile|\bauto|onboard|on-board|idle|rpm|cadillac|fiat|porsche|ferrari|camaro|chevy|bus|train|tram|chassis)/],
+  ['車輛引擎', /\b(cars?\b|vehicle|engine|motor|driv|traffic|truck|motorcycle|race|racing|tyre|tire|brake|automobile|\bauto|onboard|on-board|idle|rpm|cadillac|fiat|porsche|ferrari|camaro|chevy|bus|train|tram|chassis)/],
   ['撞擊破壞', /\b(impact|crash|destruction|destroy|smash|break|broke|shatter|collision|debris|demolition|bash|thud|wreck|crush|hit|punch|fight|brawl)/],
   ['血腥 Gore', /\b(gore|flesh|skin|skinning|meat|bone|gristle|guts?|blood|splat|squelch|squish|cavity|\brip\b|sawing)/],
   ['警報警笛', /\b(siren|alarm|klaxon|whistle|honk|buzzer)/],
   ['腳步', /\b(footstep|footsteps|foot|walk|walking|running|jog|steps?)\b/],
   ['群眾人聲', /\b(crowd|voice|vocal|scream|shout|cheer|chatter|talk|speak|laugh|breath|grunt|whisper|applause|murmur|clap)/],
+  // 音樂 before 動物/水/Foley：song titles often name animals/objects ("Monkeys
+  // Spinning Monkeys"), but field recordings almost never say "music"/"drum".
+  ['音樂節奏', /\b(music|musical|drum|melody|loop|beat|rhythm|jingle|chord|piano|guitar|synth|orchestra|zither|shaker|pluck|harp|violin|cello|flute|marimba|xylophone)/],
   ['動物', /\b(animal|dog|cat|bird|horse|insect|lion|tiger|monster|creature|growl|roar|bark|meow|chirp|pig|snort|squeal|oink|deer|cow|sheep|goat|hen|chicken|rooster|hoof)/],
   ['水與液體', /\b(water|splash|liquid|drip|pour|river|ocean|sea|wave|bubble|underwater|stream|rain|ice)/],
   ['火', /\b(fire|flame|burn|burning|ignite|combust|torch|campfire)/],
@@ -36,7 +43,6 @@ const CATEGORY_RULES: [string, RegExp][] = [
   ['轉場 whoosh', /\b(whoosh|woosh|swoosh|swish|transition|riser|sweep|pass-?by|passby|flyby|fly-?by|tension|osc)/],
   ['機械工業', /\b(machine|mechanic|mechanical|gear|hydraulic|servo|industrial|factory|conveyor|crane)/],
   ['物件 Foley', /\b(cloth|fabric|paper|wood|wooden|metal|metallic|glass|plastic|door|drawer|keys?|coin|book|switch|handle|foley|rope|chain|lock|zipper|sink|cupboard|cabinet|faucet|tap|kitchen|bathroom|spring|bounce|squeak|pulley|swing|creak)/],
-  ['音樂節奏', /\b(music|musical|drum|melody|loop|beat|rhythm|jingle|stinger|chord|piano|guitar|synth|orchestra|zither|shaker|pluck|harp|violin|cello|flute|marimba|xylophone)/],
   ['環境氛圍', /\b(ambien|ambient|atmos|atmosphere|roomtone|room ?tone|background|city|street|forest|nature|park|office|restaurant|drone)/],
 ]
 
