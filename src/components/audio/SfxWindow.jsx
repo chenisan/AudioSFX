@@ -2,10 +2,12 @@ import { useState } from 'react'
 import SfxPanel from './SfxPanel'
 import SfxLibraryPanel from './SfxLibraryPanel'
 import LocalLibraryPanel from './LocalLibraryPanel'
+import LocalFolderPanel from './LocalFolderPanel'
 
-// Content of the floating「音效」window: three tabs —
+// Content of the floating「音效」window: tabs —
 //   音效庫 — bundled CC0 library (Kenney.nl), instant, no engine needed
-//   本機   — the user's own local SFX folder (e.g. D:\sfx_sample, Sonniss packs)
+//   本機   — the user's own local SFX folder, grouped by keyword categorizer
+//   資料夾 — same folder, browsed by the on-disk folder tree (purchased packs)
 //   AI 生成 — text→SFX via Woosh (needs the GPU engine running)
 export default function SfxWindow() {
   const [tab, setTab] = useState('library')   // default to the no-engine path
@@ -26,11 +28,13 @@ export default function SfxWindow() {
       <div className="flex shrink-0 border-b border-[#2a2a2a]">
         <Tab id="library" label="音效庫" />
         <Tab id="local" label="本機" />
+        <Tab id="folder" label="資料夾" />
         <Tab id="generate" label="AI 生成" />
       </div>
       <div className="flex-1 min-h-0">
         {tab === 'library' ? <SfxLibraryPanel />
           : tab === 'local' ? <LocalLibraryPanel />
+          : tab === 'folder' ? <LocalFolderPanel />
           : <SfxPanel />}
       </div>
     </div>
