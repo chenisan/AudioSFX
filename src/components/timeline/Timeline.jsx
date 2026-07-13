@@ -104,7 +104,26 @@ export default function Timeline() {
   }, [viewportWidth, effectiveDuration])
 
   const clampZoom = useCallback((v) => Math.max(minZoom, Math.min(ZOOM_MAX, v)), [minZoom])
-  const setZoomClamped = useCallback((v) => setZoom(clampZoom(v)), [clampZoom, setZoom])
+  // Zoom buttons/slider anchor on the playhead: it keeps its viewport x while
+  // the timeline stretches around it (centred instead when it's off-screen).
+  // Ctrl+wheel zoom (handleWheel) anchors on the cursor, not this.
+  const setZoomClamped = useCallback((v) => {
+    const newZoom = clampZoom(v)
+    const prevZoom = useProjectStore.getState().zoom
+    if (newZoom === prevZoom) return
+    const el = contentRef.current
+    const t = useProjectStore.getState().playheadTime || 0
+    setZoom(newZoom)
+    if (!el) return
+    const viewportX = t * prevZoom + LABEL_WIDTH - el.scrollLeft
+    const visible = viewportX >= LABEL_WIDTH && viewportX <= el.clientWidth
+    const anchorX = visible ? viewportX : (LABEL_WIDTH + (el.clientWidth - LABEL_WIDTH) / 2)
+    requestAnimationFrame(() => {
+      const elNow = contentRef.current
+      if (!elNow) return
+      elNow.scrollLeft = Math.max(0, t * newZoom + LABEL_WIDTH - anchorX)
+    })
+  }, [clampZoom, setZoom])
 
   // If duration grows (e.g. adding a long clip) push zoom up to keep it fitted
   useEffect(() => {
